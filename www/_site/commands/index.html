@@ -67,6 +67,7 @@
         </div>
         <div class="collapse navbar-collapse">
           <ul class="nav navbar-nav">
+            <li><a href="/moosh2">moosh2</a></li>
             <li><a href="https://github.com/tmuras/moosh">github</a></li>
             <li><a href="/faq">FAQ</a></li>
             <li><a href="/commands">commands</a></li>
@@ -895,6 +896,102 @@ id 2 by:</p>
 
 <pre><code>moosh config-set logo http://example.com/logo.png theme_sky_high
 </code></pre>
+
+<a name="config-export"></a>
+<h2>config-export</h2>
+
+<p>Exports all Moodle configuration settings from the <code>mdl_config</code> table to a JSON file.</p>
+
+<p>This command allows administrators to back up all site configuration values for migration, backup, or review. The output is a JSON file mapping config names to their values.</p>
+
+<p>Available options:</p>
+
+<table>
+<thead>
+<tr>
+<th> Option              </th>
+<th> Description                                      </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> -o, --output-file   </td>
+<td> Output file for export (default: stdout).        </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>Example 1: Export all config values to a file named <code>config.json</code>.
+<code>
+moosh config-export --output-file=config.json
+</code></p>
+
+<p>Example 2: Export all config values to stdout.
+<code>
+moosh config-export
+</code></p>
+
+<p>The output file will contain a JSON object, for example:
+<code>json
+{
+  "sitefullname": "My Moodle Site",
+  "siteshortname": "moodle"
+}
+</code></p>
+
+<hr />
+
+<a name="config-import"></a>
+<h2>config-import</h2>
+
+<p>Imports Moodle configuration settings from a JSON file into the <code>mdl_config</code> table and purges all caches.</p>
+
+<p>This command allows administrators to restore or update site configuration from a previously exported JSON file. By default, existing config values are overwritten. Use the <code>--skip-existing</code> option to only insert new config values.</p>
+
+<p>⚠️ <strong>WARNING:</strong> This command modifies the database directly. Always back up your database before running.</p>
+
+<p>Available options:</p>
+
+<table>
+<thead>
+<tr>
+<th> Option              </th>
+<th> Description                                             </th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td> -i, --input-file    </td>
+<td> Input JSON file for import. (required)                  </td>
+</tr>
+<tr>
+<td> -s, --skip-existing </td>
+<td> Skip existing config values during import. (optional)   </td>
+</tr>
+</tbody>
+</table>
+
+
+<p>Example 1: Import config values from <code>config.json</code>, overwriting existing values.
+<code>
+moosh config-import --input-file=config.json
+</code></p>
+
+<p>Example 2: Import config values from <code>config.json</code>, skipping existing values.
+<code>
+moosh config-import --input-file=config.json --skip-existing
+</code></p>
+
+<p>After import, all Moodle caches are purged automatically.</p>
+
+<p>The input file must be a JSON object mapping config names to values, for example:
+<code>json
+{
+  "sitefullname": "My Moodle Site",
+  "siteshortname": "moodle"
+}
+</code></p>
 
 <a name="context-freeze"></a>
 <h2>context-freeze</h2>
@@ -2814,6 +2911,139 @@ and add "-on" or "-off" to the caontext level name to turn it on or off.</p>
 <p>Example 2: Prevent "manager" role to be set on course level</p>
 
 <pre><code>moosh role-update-contextlevel manager -course-off
+</code></pre>
+
+<a name="security-xss-cleanup"></a>
+<h2>security-xss-cleanup</h2>
+
+<p>Moosh command to clean up XSS code from the database that can be used to attack users.</p>
+
+<p>This command helps administrators find and clean up XSS code from the Moodle
+database. It operates in three primary modes:</p>
+
+<ol>
+<li><p><strong><code>detect</code> mode (default):</strong> Finds and reports all occurrences of XSS
+code in the database.</p></li>
+<li><p><strong><code>defuse</code> mode:</strong> Finds and replaces all occurrences of XSS code in the
+database with their HTML encoded equivalents.</p></li>
+<li><p><strong><code>clean</code> mode:</strong> Finds and removes all occurrences of XSS code from the
+database.</p></li>
+</ol>
+
+
+<p>The output can be formatted as plain text, JSON, XML, or CSV, making it
+easy to parse or use in other scripts.</p>
+
+<p>If the <code>--output-file</code> option is given, all output will be redirected to the specified file.</p>
+
+<p>Example output files for each format:</p>
+
+<p>JSON:
+<code>json
+[
+  {"id": "123", "table": "my_table", "column": "my_column", "occurrences": ["&lt;script&gt;alert(1)&lt;/script&gt;"]}
+]
+</code></p>
+
+<p>XML:
+<code>xml
+&lt;scan_matches&gt;
+  &lt;match&gt;
+    &lt;id&gt;123&lt;/id&gt;
+    &lt;table&gt;my_table&lt;/table&gt;
+    &lt;column&gt;my_column&lt;/column&gt;
+    &lt;occurrences&gt;
+        &lt;value&gt;&amp;lt;script&amp;gt;alert(1)&amp;lt;/script&amp;gt;&lt;/value&gt;
+        &lt;value&gt;&amp;lt;script&amp;gt;alert(1)&amp;lt;/script&amp;gt;&lt;/value&gt;
+    &lt;/occurrences&gt;
+  &lt;/match&gt;
+&lt;/scan_matches&gt;
+</code></p>
+
+<p>CSV:
+<code>csv
+123,my_table,my_column,"&lt;script&gt;alert(1)&lt;/script&gt;; &lt;script&gt;alert(1)&lt;/script&gt;"
+</code></p>
+
+<p>You can also use the <code>--input-file</code> and <code>--input-format</code> options to process a list of records
+from a file (in XML, JSON, or CSV format) instead of scanning the database.
+For an example you can first output the results of a scan to a file and then edit it manually
+to filter out false positives and load that file as input for this command.</p>
+
+<p>Example input files:</p>
+
+<p>XML:
+<code>xml
+&lt;scan_matches&gt;
+  &lt;match&gt;
+    &lt;id&gt;123&lt;/id&gt;
+    &lt;table&gt;my_table&lt;/table&gt;
+    &lt;column&gt;my_column&lt;/column&gt;
+  &lt;/match&gt;
+&lt;/scan_matches&gt;
+</code></p>
+
+<p>JSON:
+<code>json
+[
+  {"id": "123", "table": "my_table", "column": "my_column"}
+]
+</code></p>
+
+<p>CSV:
+<code>csv
+123,my_table,my_column
+</code></p>
+
+<p>If the <code>--summary</code> option is given, a summary of the total number of matches
+and records processed will be displayed at the end of the output.</p>
+
+<p>The <code>--include-expression</code> option allows you to specify a regular expression; only matches that satisfy this
+expression will be processed.</p>
+
+<p>The <code>--exclude-expression</code> option allows you to specify a regular expression; matches that satisfy this expression
+will be excluded from processing.</p>
+
+<p>Example 1: Detect all occurrences of XSS code in the database (default mode).</p>
+
+<pre><code>$ php moosh.php script-xss-cleanup
+</code></pre>
+
+<p>Example 2: Defuse all occurrences of XSS code in the database by replacing  them with their HTML encoded equivalents.</p>
+
+<pre><code>$ php moosh.php script-xss-cleanup --mode=defuse
+</code></pre>
+
+<p>Example 3: Clean all occurrences of XSS code from the database.</p>
+
+<pre><code>$ php moosh.php script-xss-cleanup --mode=clean
+</code></pre>
+
+<p>Example 4: Output the results in JSON format to a file and show a summary.</p>
+
+<pre><code>$ php moosh.php script-xss-cleanup --output-format=json --output-file=file1.json --summary
+</code></pre>
+
+<p>Example 5: Clean only records listed in an input file (XML format).</p>
+
+<pre><code>$ php moosh.php script-xss-cleanup --mode=clean --input-file=matches.xml --input-format=xml
+</code></pre>
+
+<p>Example 6: Defuse records from a CSV input file.</p>
+
+<pre><code>$ php moosh.php script-xss-cleanup --mode=defuse --input-file=matches.csv --input-format=csv
+</code></pre>
+
+<p>Example 7: Detect XSS in records from a JSON input file and output as plain text.</p>
+
+<pre><code>$ php moosh.php script-xss-cleanup --input-file=matches.json --input-format=json --output-format=plain
+</code></pre>
+
+<p>Example 8: Detect XSS in records from a JSON input file and output as plain text and exclude any matches for
+           youtube.com and h5p.org</p>
+
+<pre><code>$ php moosh.php script-xss-cleanup --input-file=matches.json --input-format=json --output-format=plain \
+        --exclude-expression='youtube\.com|h5p\.org'
 </code></pre>
 
 <a name="section-config-set"></a>
