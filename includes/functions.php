@@ -487,3 +487,43 @@ function eval_config(string $top_dir) {
         cli_error('After evaluating config.php, $CFG is not set');
     }
 }
+
+/**
+ * Minimal template renderer replacing Twig for moosh code-generation templates.
+ * Supports: {{ var }}, {{ var|capitalize }}, {% include "file.twig" %}.
+ */
+function render_template($templatePath, array $vars, $templateDir = null) {
+    if ($templateDir === null) {
+        $templateDir = dirname($templatePath);
+    }
+    $content = file_get_contents($templatePath);
+    // Handle {% include "..." %} and {% include '...' %}
+    $content = preg_replace_callback(
+        '/\{%\s*include\s*[\'"]([^\'"]+)[\'"]\s*%\}/',
+        function ($m) use ($templateDir, $vars) {
+            $includePath = $templateDir . '/' . ltrim($m[1], '/');
+            if (!file_exists($includePath)) {
+                // Try relative to templates root (two levels up from current template dir)
+                $includePath = dirname($templateDir) . '/' . $m[1];
+            }
+            return file_exists($includePath) ? render_template($includePath, $vars, $templateDir) : '';
+        },
+        $content
+    );
+    // Handle {{ var|capitalize }} then {{ var }}
+    $content = preg_replace_callback(
+        '/\{\{\s*(\w+)\|capitalize\s*\}\}/',
+        function ($m) use ($vars) {
+            return isset($vars[$m[1]]) ? ucfirst($vars[$m[1]]) : '';
+        },
+        $content
+    );
+    $content = preg_replace_callback(
+        '/\{\{\s*(\w+)\s*\}\}/',
+        function ($m) use ($vars) {
+            return isset($vars[$m[1]]) ? $vars[$m[1]] : '';
+        },
+        $content
+    );
+    return $content;
+}

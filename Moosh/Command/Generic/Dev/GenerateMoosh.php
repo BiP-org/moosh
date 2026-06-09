@@ -8,9 +8,6 @@
 
 namespace Moosh\Command\Generic\Dev;
 use Moosh\MooshCommand;
-use \Twig\Loader\FilesystemLoader;
-use \Twig\Environment;
-use \Twig\Extension\Debug;
 
 class GenerateMoosh extends MooshCommand
 {
@@ -28,8 +25,7 @@ class GenerateMoosh extends MooshCommand
 
     public function execute()
     {
-        $loader = new \Twig\Loader\FilesystemLoader($this->mooshDir . '/templates');
-        $twig = new \Twig\Environment($loader);
+        $templateDir = $this->mooshDir . '/templates';
 
         $command = explode('-', $this->arguments[0], 2);
         if (count($command) != 2) {
@@ -41,7 +37,7 @@ class GenerateMoosh extends MooshCommand
         $dirPath = $this->cwd . '/Moosh/Command/Moodle23/' . ucfirst($command[0]);
         $filePath = $dirPath . '/' . $fileName;
 
-        $content = $twig->render('moosh/command.twig', array('category' => $command[0], 'command' => $command[1]));
+        $content = render_template($templateDir . '/moosh/command.twig', array('category' => $command[0], 'command' => $command[1]), $templateDir);
         if (file_exists($filePath)) {
             cli_problem("File $fileName exists, dumping output instead of saving as a new file");
             echo $content;

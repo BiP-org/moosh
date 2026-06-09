@@ -8,9 +8,6 @@
 
 namespace Moosh\Command\Moodle39\Dev;
 use Moosh\MooshCommand;
-use \Twig\Loader\Filesystem;
-use \Twig\Environment;
-use \Twig\Extension\Debug;
 
 class FormAdd extends MooshCommand
 {
@@ -26,17 +23,15 @@ class FormAdd extends MooshCommand
     public function execute()
     {
 
-        $loader = new \Twig\Loader\Filesystem($this->mooshDir.'/templates');
-        $twig = new \Twig\Environment($loader,array('debug' => true));
-        $twig->addExtension(new \Twig\Extension\Debug());
-
+        $templateDir = $this->mooshDir . '/templates';
         $template = 'form/form-element-' . $this->arguments[0] . '.twig';
-        if (!$loader->exists($template)) {
+        $templatePath = $templateDir . '/' . $template;
+        if (!file_exists($templatePath)) {
             cli_problem("Template $template does not exist");
             exit(1);
         }
 
-        $content = $twig->render($template, array('id' => $this->arguments[1], 'langCategory' => $this->getLangCategory()));
+        $content = render_template($templatePath, array('id' => $this->arguments[1], 'langCategory' => $this->getLangCategory()), $templateDir);
 
         //do I know where to add the new code?
         $this->loadSession();

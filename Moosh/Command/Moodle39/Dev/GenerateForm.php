@@ -8,8 +8,6 @@
 
 namespace Moosh\Command\Moodle39\Dev;
 use Moosh\MooshCommand;
-use \Twig\Loader\Filesystem;
-use \Twig\Environment;
 
 class GenerateForm extends MooshCommand
 {
@@ -25,8 +23,7 @@ class GenerateForm extends MooshCommand
         //command may need to store some information in-between runs
         $this->loadSession();
 
-        $loader = new \Twig\Loader\Filesystem($this->mooshDir.'/templates');
-        $twig = new \Twig\Environment($loader);
+        $templateDir = $this->mooshDir . '/templates';
 
         $formName = '';
         if ($this->pluginInfo['type'] != 'unknown') {
@@ -43,7 +40,7 @@ class GenerateForm extends MooshCommand
         }
         $this->session['generator.last-file'][$this->cwd] = $fileName;
 
-        $content = $twig->render('form/form.twig', array('formName' => $formName));
+        $content = render_template($templateDir . '/form/form.twig', array('formName' => $formName), $templateDir);
         if (file_exists($filePath)) {
             cli_problem("File $fileName exists");
             echo $content;
@@ -53,7 +50,7 @@ class GenerateForm extends MooshCommand
         }
 
         //also generate a client code
-        echo $twig->render('form/form_client.twig', array('formName' => $formName,'formRelativePath'=> $this->relativeDir, 'fileName'=>$fileName));
+        echo render_template($templateDir . '/form/form_client.twig', array('formName' => $formName, 'formRelativePath' => $this->relativeDir, 'fileName' => $fileName), $templateDir);
 
         $this->saveSession();
     }
