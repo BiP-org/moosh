@@ -1,13 +1,16 @@
 <?php
 /**
  * Adds a new redis store instance to cache.
- * moosh cache-add-redis-store [-p, --password] [-k, --key-prefix] <name> <server>
+ * moosh cache-add-redis-store [-p, --password] [-k, --key-prefix] [-t, --tls] <name> <server>
  *
  * Add new instance "Test" with server set to "localhost"
  * @example moosh cache-add-redis-store "Test" "localhost"
  *
  * Add new instance "Test2" with server set to "localhost", password set to "123456" and key prefix set to "key_"
  * @example moosh cache-add-redis-store --password "123456" -k "key_" "Test2" "localhost"
+ *
+ * Add new instance "Test3" with TLS encryption enabled
+ * @example moosh cache-add-redis-store --tls "Test3" "localhost"
  *
  * @copyright  2012 onwards Tomasz Muras
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -27,6 +30,7 @@ class CacheAddRedisStore extends MooshCommand {
         $this->addArgument('server');
         $this->addOption('p|password:', "The server connection password");
         $this->addOption('k|key-prefix:', "The key prefix");
+        $this->addOption('t|tls', "Enable TLS encryption for the connection");
     }
 
     public function execute() {
@@ -53,6 +57,7 @@ class CacheAddRedisStore extends MooshCommand {
         $data->prefix = $options['key-prefix'];
         $data->serializer = 1;
         $data->compressor = 0;
+        $data->encryption = !empty($options['tls']);
 
         $config = \cache_administration_helper::get_store_configuration_from_data($data);
 

@@ -332,6 +332,10 @@ Example 2: Add new instance "Test2" with server set to "localhost", password set
 
     moosh cache-add-redis-store --password "123456" -k "key_" "Test2" "localhost"
 
+Example 3: Add new instance "Test3" with TLS encryption enabled
+
+    moosh cache-add-redis-store --tls "Test3" "localhost"
+
 cache-add-mem-store
 --------------------
 
