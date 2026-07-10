@@ -17,7 +17,7 @@ env:
     CODENAME: bookworm
     COMPONENTS: main
     ARCHITECTURES: amd64
-    PAGES_URL: ${{ vars.PAGES_URL || format('https://{0}.github.io/{1}/', github.repository_owner, env.REPO_NAME) }}
+    PAGES_URL: ${{ vars.PAGES_URL || format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}
 
 jobs:
   build:
