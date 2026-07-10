@@ -1,0 +1,60 @@
+name: Sync with upstream
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  create-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/tmuras/moosh.git 2>/dev/null || git remote set-url upstream https://github.com/tmuras/moosh.git
+          git fetch upstream master
+
+      - name: Check for upstream changes
+        id: compare
+        run: |
+          git fetch origin master
+          if git rev-list --left-right --count origin/master...upstream/master | awk '{print $2}' | grep -q '^[1-9]'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create sync branch and pull request
+        if: steps.compare.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="sync-upstream-master"
+          git checkout -B "$BRANCH" upstream/master
+          git push origin "$BRANCH" --force-with-lease
+
+          if [ -n "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number' 2>/dev/null)" ]; then
+            echo "An open PR already exists for $BRANCH."
+            exit 0
+          fi
+
+          gh pr create \
+            --title "Sync with tmuras/moosh master" \
+            --body "This PR updates the branch with the latest changes from tmuras/moosh:master." \
+            --base "${{ github.event.repository.default_branch }}" \
+            --head "$BRANCH"
