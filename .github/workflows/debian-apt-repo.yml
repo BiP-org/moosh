@@ -51,7 +51,7 @@ jobs:
           maintainer: georg-bip-bot-bildung.gv.at@glas.eu.org
           repo-name: ${{ env.REPO_NAME }}
           signing-key: ${{ secrets.APT_GPG_PRIVATE_KEY }}
-          signing-passphrase: ${{ secrets.APT_GPG_PASSPHRASE || '' }}
+          signing-key-passphrase: ${{ secrets.APT_GPG_PASSPHRASE || '' }}
           codename: ${{ env.CODENAME }}
           components: ${{ env.COMPONENTS }}
           architectures: ${{ env.ARCHITECTURES }}
