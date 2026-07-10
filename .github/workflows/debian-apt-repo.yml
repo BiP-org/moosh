@@ -41,7 +41,7 @@ jobs:
         run: |
           mkdir -p public
           touch public/.nojekyll
-          find dist -maxdepth 1 -type f -name '*.deb' -exec cp {} public/ \;
+          find dist -maxdepth 1 -type f -name '*.deb' -exec cp -v {} public/ \;
 
       - name: Create apt repository
         uses: morph027/apt-repo-action@v3
