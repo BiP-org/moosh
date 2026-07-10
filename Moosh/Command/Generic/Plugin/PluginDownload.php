@@ -175,15 +175,15 @@ class PluginDownload extends MooshCommand
     public function bootstrapLevel() {
         $argc = count($_SERVER['argv']);
 
-        $nomoodleargv = ['-v', '--version', '-uv', '-h', '--help'];
-
-        if (array_intersect($nomoodleargv, $_SERVER['argv'])) {
+        if ($argc == 2) {
             return self::$BOOTSTRAP_NONE;
         }
 
-        if ( $argc == 2 ) {
+        if (in_array('-h', $_SERVER['argv'], true) || in_array('--help', $_SERVER['argv'], true)) {
             return self::$BOOTSTRAP_NONE;
         }
+
+        return self::$BOOTSTRAP_FULL;
     }
 
     public function requireHomeWriteable() {
