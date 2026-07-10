@@ -8,9 +8,9 @@ use function ns\fun_2 as alias;
 use const ns\CONST_1;
 use const ns\CONST_2 as ALIAS;
 
-use {
-    function ns\fun_3,
-    const ns\const_3
+use ns\{
+    function fun_3,
+    const const_3
 };
 
 const UNDOCUMENTED_CONST = 1;
