@@ -1,9 +1,12 @@
-name: Publish Debian apt repository
+name: Publish Debian Package to APT repository on github pages
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/debian-apt-repo.yml'
   workflow_run:
-    workflows: ["Build Debian package"]
+    workflows: ["Build and Test", "Build Debian package"]
     types:
       - completed
 
@@ -21,10 +24,11 @@ env:
 
 jobs:
   build:
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
     runs-on: ubuntu-latest
     steps:
       - name: Download Debian package artifact
+        continue-on-error: true
         uses: actions/download-artifact@v7
         with:
           name: debian-package

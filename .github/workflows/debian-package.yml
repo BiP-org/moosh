@@ -3,9 +3,12 @@ name: Build Debian package
 on:
   workflow_dispatch:
   push:
-    branches: ["master"]
-  pull_request:
-    branches: ["master"]
+    paths:
+      - '.github/workflows/debian-package.yml'
+  workflow_run:
+    workflows: ["Build and Test", "Build Debian package"]
+    types:
+      - completed
 
 jobs:
   build-deb:
