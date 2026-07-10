@@ -1,0 +1,12 @@
+#!/usr/bin/make -f
+%:
+	dh $@
+
+override_dh_auto_build:
+	composer install --no-interaction --prefer-dist
+
+override_dh_auto_install:
+	install -d debian/moosh/usr/share/moosh
+	cp -a . debian/moosh/usr/share/moosh/
+	install -d debian/moosh/usr/bin
+	ln -s /usr/share/moosh/moosh.php debian/moosh/usr/bin/moosh

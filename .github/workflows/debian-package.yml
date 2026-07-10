@@ -1,0 +1,32 @@
+name: Build Debian package
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["master"]
+  pull_request:
+    branches: ["master"]
+
+jobs:
+  build-deb:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Debian packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y devscripts debhelper build-essential composer php-cli
+
+      - name: Build Debian package
+        run: |
+          chmod +x debian/rules
+          dpkg-buildpackage -us -uc -b
+
+      - name: Upload Debian package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: debian-package
+          path: |
+            ../moosh_*.deb

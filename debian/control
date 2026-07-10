@@ -1,0 +1,13 @@
+Source: moosh
+Section: utils
+Priority: optional
+Maintainer: GitHub Actions <actions@github.com>
+Build-Depends: debhelper-compat (= 13), php-cli, composer
+Standards-Version: 4.6.2
+Rules-Requires-Root: no
+
+Package: moosh
+Architecture: all
+Depends: ${misc:Depends}, php-cli
+Description: Moodle shell command-line tool
+ Moosh is a command-line tool for interacting with Moodle.
