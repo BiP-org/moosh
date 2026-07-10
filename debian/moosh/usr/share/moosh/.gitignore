@@ -10,3 +10,4 @@ tests/out.txt
 tags
 *.tags
 .phpunit.result.cache
+debian/moosh
