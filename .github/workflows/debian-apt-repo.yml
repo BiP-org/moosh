@@ -45,4 +45,4 @@ jobs:
           package-folder: public
           branch: gh-pages
           gpg-private-key: ${{ secrets.APT_GPG_PRIVATE_KEY }}
-          gpg-passphrase: ${{ secrets.APT_GPG_PASSPHRASE }}
+
