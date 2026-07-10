@@ -101,17 +101,38 @@ class PluginInstall extends MooshCommand
             mkdir($unzipdir);
         }
 
-        run_external_command("unzip $downloadedfile -d $unzipdir");
-        run_external_command("rm $downloadedfile");
+        run_external_command("unzip " . escapeshellarg($downloadedfile) . " -d " . escapeshellarg($unzipdir));
+        run_external_command("rm " . escapeshellarg($downloadedfile));
 
-        //Get the path of uncompressed plugin dir (in case the .zip decompresses into multiple directories / non standard directory)
-        $uncompresseddir = exec("find $unzipdir -name 'version.php' | rev | cut -d'/' -f 2- | rev");
-        if (file_exists($uncompresseddir)){
-            run_external_command("mv $uncompresseddir $targetpath");
-        } else {
+        // Find the shallowest version.php path to identify the plugin root.
+        $versionFiles = array();
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($unzipdir, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::SELF_FIRST
+        );
+        foreach ($iterator as $fileinfo) {
+            if ($fileinfo->isFile() && $fileinfo->getFilename() === 'version.php') {
+                $versionFiles[] = $fileinfo->getPath();
+            }
+        }
+
+        if (empty($versionFiles)) {
             die("The zipfile does not seem to be a valid plugin (no version.php found)\n");
         }
-        run_external_command("rm -rf $unzipdir");
+
+        usort($versionFiles, function($a, $b) {
+            $aDepth = substr_count(rtrim($a, DIRECTORY_SEPARATOR), DIRECTORY_SEPARATOR);
+            $bDepth = substr_count(rtrim($b, DIRECTORY_SEPARATOR), DIRECTORY_SEPARATOR);
+            return $aDepth <=> $bDepth;
+        });
+
+        $uncompresseddir = $versionFiles[0];
+        if (!file_exists($uncompresseddir)) {
+            die("The zipfile does not seem to be a valid plugin (no version.php found)\n");
+        }
+
+        run_external_command("mv " . escapeshellarg($uncompresseddir) . " " . escapeshellarg($targetpath));
+        run_external_command("rm -rf " . escapeshellarg($unzipdir));
 
         echo "Installing\n";
         echo "\tname:    $pluginname\n";
