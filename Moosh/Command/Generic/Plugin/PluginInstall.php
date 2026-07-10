@@ -103,7 +103,13 @@ class PluginInstall extends MooshCommand
 
         run_external_command("unzip " . escapeshellarg($downloadedfile) . " -d " . escapeshellarg($unzipdir));
         run_external_command("rm " . escapeshellarg($downloadedfile));
+        run_external_command("unzip " . escapeshellarg($downloadedfile) . " -d " . escapeshellarg($unzipdir));
+        run_external_command("rm " . escapeshellarg($downloadedfile));
 
+        $uncompresseddir = $this->find_plugin_root_dir($unzipdir);
+
+        run_external_command("mv " . escapeshellarg($uncompresseddir) . " " . escapeshellarg($targetpath));
+        run_external_command("rm -rf " . escapeshellarg($unzipdir));
         // Find the shallowest version.php path to identify the plugin root.
         $versionFiles = array();
         $iterator = new \RecursiveIteratorIterator(
@@ -139,6 +145,43 @@ class PluginInstall extends MooshCommand
         echo "\tversion: $version->version\n";
         upgrade_noncore(true);
         echo "Done\n";
+    }
+
+    /**
+     * Find the shallowest plugin root directory containing a version.php file.
+     *
+     * @param string $unzipdir
+     * @return string
+     */
+    private function find_plugin_root_dir($unzipdir)
+    {
+        $versionfiles = array();
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($unzipdir, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::SELF_FIRST
+        );
+        foreach ($iterator as $fileinfo) {
+            if ($fileinfo->isFile() && $fileinfo->getFilename() === 'version.php') {
+                $versionfiles[] = $fileinfo->getPath();
+            }
+        }
+
+        if (empty($versionfiles)) {
+            die("The zipfile does not seem to be a valid plugin (no version.php found)\n");
+        }
+
+        usort($versionfiles, function($a, $b) {
+            $aDepth = substr_count(rtrim($a, DIRECTORY_SEPARATOR), DIRECTORY_SEPARATOR);
+            $bDepth = substr_count(rtrim($b, DIRECTORY_SEPARATOR), DIRECTORY_SEPARATOR);
+            return $aDepth <=> $bDepth;
+        });
+
+        $uncompresseddir = $versionfiles[0];
+        if (!file_exists($uncompresseddir)) {
+            die("The zipfile does not seem to be a valid plugin (no version.php found)\n");
+        }
+
+        return $uncompresseddir;
     }
 
     /**
