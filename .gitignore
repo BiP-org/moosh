@@ -11,3 +11,4 @@ tags
 *.tags
 .phpunit.result.cache
 debian/moosh
+.build
