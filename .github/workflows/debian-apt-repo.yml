@@ -56,6 +56,47 @@ jobs:
           components: ${{ env.COMPONENTS }}
           architectures: ${{ env.ARCHITECTURES }}
 
+      - name: Create README with installation instructions
+        run: |
+          cat > public/README.md << 'EOF'
+          # ${{ env.REPO_NAME }} Debian Repository
+          
+          This repository provides Debian packages for ${{ env.REPO_NAME }}.
+          
+          ## Installation
+          
+          ### 1. Add the GPG key
+          
+          ```bash
+          curl -sfLo /tmp/${{ env.REPO_NAME }}.asc https://tmuras.github.io/moosh/gpg.key
+          sudo mv /tmp/${{ env.REPO_NAME }}.asc /etc/apt/keyrings/${{ env.REPO_NAME }}.asc
+          ```
+          
+          ### 2. Add the repository
+          
+          ```bash
+          echo "deb [signed-by=/etc/apt/keyrings/${{ env.REPO_NAME }}.asc] https://tmuras.github.io/moosh/ ${{ env.CODENAME }} ${{ env.COMPONENTS }}" | \
+            sudo tee /etc/apt/sources.list.d/${{ env.REPO_NAME }}.list
+          ```
+          
+          ### 3. Update and install
+          
+          ```bash
+          sudo apt update
+          sudo apt install moosh
+          ```
+          
+          ## Verification
+          
+          To verify the package signature:
+          
+          ```bash
+          apt-key adv --keyserver keyserver.ubuntu.com --recv-keys <KEY_ID>
+          ```
+          
+          EOF
+          cat public/README.md
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
@@ -82,6 +123,7 @@ jobs:
           echo ':rocket:' >> $GITHUB_STEP_SUMMARY
           echo '' >> $GITHUB_STEP_SUMMARY
           echo '```bash' >> $GITHUB_STEP_SUMMARY
-          echo 'curl -sfLo /etc/apt.trusted.gpg.d/${{ env.REPO_NAME }}.asc ${{ steps.deployment.outputs.page_url }}gpg.key' >> $GITHUB_STEP_SUMMARY
-          echo 'echo "deb ${{ steps.deployment.outputs.page_url }} ${{ env.CODENAME }} ${{ env.COMPONENTS }}" >/etc/apt/sources.list.d/${{ env.REPO_NAME }}.list' >> $GITHUB_STEP_SUMMARY
+          echo 'curl -sfLo /tmp/${{ env.REPO_NAME }}.asc ${{ steps.deployment.outputs.page_url }}gpg.key' >> $GITHUB_STEP_SUMMARY
+          echo 'sudo mv /tmp/${{ env.REPO_NAME }}.asc /apt/keyrings/${{ env.REPO_NAME }}.asc' >> $GITHUB_STEP_SUMMARY
+          echo 'sudo tee "deb [signed-by=/apt/keyrings/${{ env.REPO_NAME }}.asc] ${{ steps.deployment.outputs.page_url }} ${{ env.CODENAME }} ${{ env.COMPONENTS }}" >/etc/apt/sources.list.d/${{ env.REPO_NAME }}.list' >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY

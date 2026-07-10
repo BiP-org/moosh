@@ -2,3 +2,4 @@ Moosh stands for MOOdle SHell. It is a commandline tool that will allow you to p
 moosh is licenced under GNU GPL v3 or any later.
 
 For documentation go to http://moosh-online.com .
+For package download go to [inofficial apt repository](https://bip-org.github.io/moosh)
