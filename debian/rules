@@ -1,6 +1,6 @@
 #!/usr/bin/make -f
 %:
-	dh $@ --with=autoreconf -Ndh_strip_nondeterminism
+	dh $@ --with=autoreconf
 
 override_dh_auto_build:
 	composer install --no-interaction --prefer-dist

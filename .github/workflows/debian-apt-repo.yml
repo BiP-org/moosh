@@ -12,6 +12,12 @@ permissions:
   pages: write
   id-token: write
 
+env:
+    REPO_NAME: moosh
+    CODENAME: bookworm
+    COMPONENTS: main
+    ARCHITECTURES: amd64
+
 jobs:
   publish:
     if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
@@ -38,11 +44,14 @@ jobs:
           find dist -maxdepth 1 -type f -name '*.deb' -exec cp {} public/ \;
 
       - name: Create apt repository
-        uses: m-vanwyk/apt-repo-action@v1
+        uses: morph027/apt-repo-action@v3
+        id: create-apt-repo
         with:
-          repo-name: moosh
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          package-folder: public
-          branch: gh-pages
-          gpg-private-key: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+          scan-dir: public
+          maintainer: georg-bip-bot-bildung.gv.at@glas.eu.org
+          repo-name: ${{ env.REPO_NAME }}
+          signing-key: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+          codename: ${{ env.CODENAME }}
+          components: ${{ env.COMPONENTS }}
+          architectures: ${{ env.ARCHITECTURES }}
 

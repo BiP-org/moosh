@@ -21,12 +21,19 @@ jobs:
 
       - name: Build Debian package
         run: |
+          mkdir -p .build
+          tmpdir="$(mktemp -d -p "$PWD/.build" moosh-deb-XXXXXX)"
+          mkdir -p "$tmpdir/src"
+          find . -mindepth 1 -maxdepth 1 \( ! -name '.build' ! -name '.git' ! -name '.github' \) -exec cp -a {} "$tmpdir/src/" \;
+          cd "$tmpdir/src"
           chmod +x debian/rules
-          dpkg-buildpackage -us -uc -b
+          dpkg-buildpackage -us -uc -b -d
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          cp "$tmpdir"/moosh_*.deb "$GITHUB_WORKSPACE/dist/"
 
       - name: Upload Debian package artifact
         uses: actions/upload-artifact@v4
         with:
           name: debian-package
           path: |
-            ../moosh_*.deb
+            dist/*.deb
