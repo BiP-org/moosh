@@ -6,7 +6,7 @@ on:
     paths:
       - '.github/workflows/debian-package.yml'
   workflow_run:
-    workflows: ["Build and Test", "Build Debian package"]
+    workflows: ["Build and Test"]
     types:
       - completed
 
