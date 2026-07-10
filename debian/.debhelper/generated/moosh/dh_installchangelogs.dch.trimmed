@@ -1,0 +1,5 @@
+moosh (1.48-1) unstable; urgency=medium
+
+  * Initial Debian packaging for moosh.
+
+ -- GitHub Actions <actions@github.com>  Fri, 10 Jul 2026 00:00:00 +0000
