@@ -59,3 +59,15 @@ jobs:
           rm includes/config*class.php
           rm -rf vendor external
           find . -name '*.php' -not -path '*/Tests/fixtures/*' -not -path '*/external/*' -print0 | xargs -0 -n1 php -l
+
+  test-in-bip-plugins:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Trigger Test Plugin Installation Workflow
+        uses: benc-uk/workflow-dispatch@v1
+        with:
+          workflow: 'TEST Plugin installation.yml'
+          repo: BiP-org/bip-plugins
+          ref: 'main' # Replace with target branch if different
+          token: ${{ secrets.BIP_BOT_GITHUB_ACTION_PAT }}
