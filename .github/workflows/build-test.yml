@@ -70,4 +70,4 @@ jobs:
           workflow: 'TEST Plugin installation.yml'
           repo: BiP-org/bip-plugins
           ref: 'main' # Replace with target branch if different
-          token: ${{ secrets.BIP_BOT_GITHUB_ACTION_PAT }}
+          token: '${{ secrets.BIP_BOT_GITHUB_ACTION_PAT }}'
