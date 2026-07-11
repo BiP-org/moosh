@@ -62,26 +62,33 @@ class PluginInstall extends MooshCommand
         $split          = explode('_', $pluginname, 2);
         $type           = $split[0];
         $component      = $split[1];
-        $tempdir        = home_dir() . '/.moosh/moodleplugins/';
+        $tempdir        = PluginCache::getCacheDir() . '/';
         $downloadedfile = $tempdir . $component . ".zip";
 
-        if (!file_exists($tempdir)) {
-            mkdir($tempdir);
-        }
+        if (PluginCache::fetch($component, $version->version, $downloadedfile)) {
+            echo "Using cached copy of $pluginname ($version->version) from $downloadedfile\n";
+        } else {
+            if (!fopen($downloadedfile, 'w')) {
+                echo "Failed to save plugin - check permissions on $tempdir.\n";
+                return;
+            }
 
-        if (!fopen($downloadedfile, 'w')) {
-            echo "Failed to save plugin - check permissions on $tempdir.\n";
-            return;
-        }
+            try {
+                file_put_contents(
+                    $downloadedfile,
+                    file_get_contents($downloadurl, false, PluginDownload::createProxyContext($this->expandedOptions))
+                );
+            }
+            catch (Exception $e) {
+                die("Failed to download plugin from $downloadurl. " . $e . "\n");
+            }
 
-        try {
-            file_put_contents(
-                $downloadedfile,
-                file_get_contents($downloadurl, false, PluginDownload::createProxyContext($this->expandedOptions))
-            );
-        }
-        catch (Exception $e) {
-            die("Failed to download plugin from $downloadurl. " . $e . "\n");
+            if (!PluginCache::isValidZip($downloadedfile)) {
+                @unlink($downloadedfile);
+                die("Downloaded file from $downloadurl is not a valid, non-empty zip archive.\n");
+            }
+
+            PluginCache::store($component, $version->version, $downloadedfile);
         }
 
         $installpath = $this->get_install_path($type);
