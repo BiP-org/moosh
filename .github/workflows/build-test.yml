@@ -2,9 +2,11 @@ name: Build and Test
 
 on:
   push:
-    branches: [ "master" ]
-  pull_request:
-    branches: [ "master" ]
+    branches: ["master"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 
 jobs:
 
@@ -14,6 +16,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+      - name: Trust the checked-out workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: Set composer package name to this repository
+        run: |
+          REPO_NAME=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
+          sed -i "s#\"name\": \"tmuras/moosh\"#\"name\": \"${REPO_NAME}\"#" composer.json
       - name: Build code
         run: composer install
       - name: Zip build

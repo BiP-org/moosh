@@ -70,18 +70,29 @@ class PluginDownload extends MooshCommand
         $tempdir        = $this->cwd;
         $downloadedfile = $tempdir . '/' . $pluginname . ".zip";
 
-        if (!fopen($downloadedfile, 'w')) {
-            cli_error("Failed to save plugin - check permissions on $tempdir.\n");
-        }
+        if (PluginCache::fetch($pluginname, $version->version, $downloadedfile)) {
+            echo "Using cached copy of $pluginname ($version->version)\n";
+        } else {
+            if (!fopen($downloadedfile, 'w')) {
+                cli_error("Failed to save plugin - check permissions on $tempdir.\n");
+            }
 
-        try {
-            file_put_contents(
-                $downloadedfile,
-                file_get_contents($downloadurl, false, self::createProxyContext($this->expandedOptions))
-            );
-        }
-        catch (Exception $e) {
-            die("Failed to download plugin from $downloadurl. " . $e . "\n");
+            try {
+                file_put_contents(
+                    $downloadedfile,
+                    file_get_contents($downloadurl, false, self::createProxyContext($this->expandedOptions))
+                );
+            }
+            catch (Exception $e) {
+                die("Failed to download plugin from $downloadurl. " . $e . "\n");
+            }
+
+            if (!PluginCache::isValidZip($downloadedfile)) {
+                @unlink($downloadedfile);
+                cli_error("Downloaded file from $downloadurl is not a valid, non-empty zip archive.\n");
+            }
+
+            PluginCache::store($pluginname, $version->version, $downloadedfile);
         }
 
         echo "Downloaded:\n";
