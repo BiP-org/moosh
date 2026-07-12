@@ -10,6 +10,7 @@
 
 namespace Moosh\Command\Generic\Plugin;
 use Moosh\MooshCommand;
+use Moosh\PluginCache;
 
 class PluginInstall extends MooshCommand
 {

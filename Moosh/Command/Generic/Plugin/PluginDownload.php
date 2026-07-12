@@ -18,6 +18,7 @@
 
 namespace Moosh\Command\Generic\Plugin;
 use Moosh\MooshCommand;
+use Moosh\PluginCache;
 
 class PluginDownload extends MooshCommand
 {
