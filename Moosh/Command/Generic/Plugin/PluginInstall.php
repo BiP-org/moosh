@@ -63,14 +63,22 @@ class PluginInstall extends MooshCommand
         $split          = explode('_', $pluginname, 2);
         $type           = $split[0];
         $component      = $split[1];
-        $tempdir        = PluginCache::getCacheDir() . '/';
-        $downloadedfile = $tempdir . $component . ".zip";
+
+        // Only the .zip belongs in the persistent cache. Downloading and
+        // unzipping needs scratch space, so that happens in a real temp
+        // directory rather than inside $MOOSH_CACHE_DIR - otherwise the
+        // extracted plugin directories linger there alongside the zips.
+        $workdir        = rtrim(sys_get_temp_dir(), '/') . '/moosh-plugin-install-' . getmypid() . '-' . uniqid() . '/';
+        if (!file_exists($workdir)) {
+            mkdir($workdir, 0755, true);
+        }
+        $downloadedfile = $workdir . $component . ".zip";
 
         if (PluginCache::fetch($component, $version->version, $downloadedfile)) {
             echo "Using cached copy of $pluginname ($version->version) from $downloadedfile\n";
         } else {
             if (!fopen($downloadedfile, 'w')) {
-                echo "Failed to save plugin - check permissions on $tempdir.\n";
+                echo "Failed to save plugin - check permissions on $workdir.\n";
                 return;
             }
 
@@ -104,49 +112,18 @@ class PluginInstall extends MooshCommand
             }
         }
 
-        $unzipdir = $tempdir . $component;
+        $unzipdir = $workdir . $component;
         if (!file_exists($unzipdir)) {
             mkdir($unzipdir);
         }
 
         run_external_command("unzip " . escapeshellarg($downloadedfile) . " -d " . escapeshellarg($unzipdir));
         run_external_command("rm " . escapeshellarg($downloadedfile));
-        run_external_command("unzip " . escapeshellarg($downloadedfile) . " -d " . escapeshellarg($unzipdir));
-        run_external_command("rm " . escapeshellarg($downloadedfile));
 
         $uncompresseddir = $this->find_plugin_root_dir($unzipdir);
 
         run_external_command("mv " . escapeshellarg($uncompresseddir) . " " . escapeshellarg($targetpath));
-        run_external_command("rm -rf " . escapeshellarg($unzipdir));
-        // Find the shallowest version.php path to identify the plugin root.
-        $versionFiles = array();
-        $iterator = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($unzipdir, \FilesystemIterator::SKIP_DOTS),
-            \RecursiveIteratorIterator::SELF_FIRST
-        );
-        foreach ($iterator as $fileinfo) {
-            if ($fileinfo->isFile() && $fileinfo->getFilename() === 'version.php') {
-                $versionFiles[] = $fileinfo->getPath();
-            }
-        }
-
-        if (empty($versionFiles)) {
-            die("The zipfile does not seem to be a valid plugin (no version.php found)\n");
-        }
-
-        usort($versionFiles, function($a, $b) {
-            $aDepth = substr_count(rtrim($a, DIRECTORY_SEPARATOR), DIRECTORY_SEPARATOR);
-            $bDepth = substr_count(rtrim($b, DIRECTORY_SEPARATOR), DIRECTORY_SEPARATOR);
-            return $aDepth <=> $bDepth;
-        });
-
-        $uncompresseddir = $versionFiles[0];
-        if (!file_exists($uncompresseddir)) {
-            die("The zipfile does not seem to be a valid plugin (no version.php found)\n");
-        }
-
-        run_external_command("mv " . escapeshellarg($uncompresseddir) . " " . escapeshellarg($targetpath));
-        run_external_command("rm -rf " . escapeshellarg($unzipdir));
+        run_external_command("rm -rf " . escapeshellarg($workdir));
 
         echo "Installing\n";
         echo "\tname:    $pluginname\n";
