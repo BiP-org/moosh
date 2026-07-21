@@ -35,7 +35,7 @@ class PluginList extends MooshCommand {
             @unlink($filepath);
             file_put_contents(
                 $filepath,
-                file_get_contents(self::$APIURL, false, PluginDownload::createProxyContext($this->expandedOptions))
+                file_get_contents(self::$APIURL, false, PluginDownload::createProxyContext($this->expandedOptions, self::$APIURL))
             );
         }
 
