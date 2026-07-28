@@ -27,6 +27,7 @@ class PluginInstall extends MooshCommand
         $this->addOption('f|force', 'Force installation even if current Moodle version is unsupported.');
         $this->addOption('d|delete', 'If it already exists, automatically delete plugin before installing.');
         $this->addOption('proxy:', 'Proxy URI scheme. Example: tcp://user:pass@host:port. You may also use env var http_proxy.');
+        $this->addOption('t|token:', 'Moodle Marketplace API token, used as a Bearer token for the download request. You may also use env var MOODLE_MARKETPLACE_TOKEN.');
     }
 
     private function init()
@@ -85,7 +86,7 @@ class PluginInstall extends MooshCommand
             try {
                 file_put_contents(
                     $downloadedfile,
-                    file_get_contents($downloadurl, false, PluginDownload::createProxyContext($this->expandedOptions))
+                    file_get_contents($downloadurl, false, PluginDownload::createProxyContext($this->expandedOptions, $downloadurl))
                 );
             }
             catch (Exception $e) {
