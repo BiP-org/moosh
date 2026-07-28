@@ -33,6 +33,7 @@ class PluginDownload extends MooshCommand
         $this->addOption('v|version:', 'Moodle major version (eg. 3.9)');
         $this->addOption('u|url', 'Only display the download URL.');
         $this->addOption('r|proxy:', 'Proxy URI scheme. Example: tcp://user:pass@host:port. You may also use env var http_proxy.');
+        $this->addOption('t|token:', 'Moodle Marketplace API token, used as a Bearer token for the download request. You may also use env var MOODLE_MARKETPLACE_TOKEN.');
     }
 
     private function setupRelease()
@@ -81,7 +82,7 @@ class PluginDownload extends MooshCommand
             try {
                 file_put_contents(
                     $downloadedfile,
-                    file_get_contents($downloadurl, false, self::createProxyContext($this->expandedOptions))
+                    file_get_contents($downloadurl, false, self::createProxyContext($this->expandedOptions, $downloadurl))
                 );
             }
             catch (Exception $e) {
@@ -203,9 +204,14 @@ class PluginDownload extends MooshCommand
     }
 
     /**
+     * @param array $expandedOptions
+     * @param string|null $url The URL the request will be made to. Used to
+     *   determine whether it's safe to attach the Marketplace Authorization
+     *   header - it must never be sent to hosts other than the Moodle
+     *   Marketplace API.
      * @return resource|null
      */
-    public static function createProxyContext(array $expandedOptions) {
+    public static function createProxyContext(array $expandedOptions, $url = null) {
         $httpConfig = [
             'method' => 'GET',
             'header' => "User-Agent: moosh\r\n" .
@@ -213,6 +219,16 @@ class PluginDownload extends MooshCommand
                         "Connection: close\r\n",
             'request_fulluri' => true,
         ];
+
+        $host = $url ? parse_url($url, PHP_URL_HOST) : null;
+        if ($host === 'marketplace.moodle.com') {
+            $token = !empty($expandedOptions['token'])
+                ? $expandedOptions['token']
+                : (getenv('MOODLE_MARKETPLACE_TOKEN') ?: null);
+            if ($token) {
+                $httpConfig['header'] .= "Authorization: Bearer $token\r\n";
+            }
+        }
 
         $proxyUrl = !empty($expandedOptions['proxy'])
             ? $expandedOptions['proxy']
