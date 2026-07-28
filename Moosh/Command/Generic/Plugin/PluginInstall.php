@@ -92,6 +92,27 @@ class PluginInstall extends MooshCommand
                 die("Failed to download plugin from $downloadurl. " . $e . "\n");
             }
 
+             // --- bip-plugins integrity check -------------------------------
+             // Verify the downloaded zip against a pinned sha256 (if any) BEFORE
+             // extracting it, so a version number can never silently resolve to
+             // different bytes than what was malware-scanned and reviewed.
+             $actualsha256 = hash_file('sha256', $downloadedfile);
+             echo "downloaded-sha256: $actualsha256\n";
+
+             $expectedsha256 = getenv('MOOSH_EXPECTED_SHA256');
+             if ($expectedsha256 !== false && trim($expectedsha256) !== '') {
+                 if (!hash_equals(strtolower(trim($expectedsha256)), strtolower($actualsha256))) {
+                     @unlink($downloadedfile);
+                     die("Refusing to install $pluginname: downloaded zip sha256 ($actualsha256) " .
+                         "does not match pinned checksum ($expectedsha256) for this version. " .
+                         "The file served for this version differs from what was scanned - " .
+                         "aborting before extraction.\n");
+                 }
+                 echo "sha256 checksum verified for $pluginname.\n";
+             } else {
+                 echo "No pinned sha256 for $pluginname (MOOSH_EXPECTED_SHA256 not set) - skipping verification.\n";
+             }
+
             if (!PluginCache::isValidZip($downloadedfile)) {
                 @unlink($downloadedfile);
                 die("Downloaded file from $downloadurl is not a valid, non-empty zip archive.\n");
