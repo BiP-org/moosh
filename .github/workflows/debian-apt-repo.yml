@@ -27,6 +27,10 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
     runs-on: ubuntu-latest
     steps:
+      - name: Create Distribution Directory
+        run: |
+          mkdir dist
+
       - name: Download Debian package artifact
         continue-on-error: true
         uses: actions/download-artifact@v7
