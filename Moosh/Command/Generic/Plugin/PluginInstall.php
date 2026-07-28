@@ -92,33 +92,24 @@ class PluginInstall extends MooshCommand
                 die("Failed to download plugin from $downloadurl. " . $e . "\n");
             }
 
-             // --- bip-plugins integrity check -------------------------------
-             // Verify the downloaded zip against a pinned sha256 (if any) BEFORE
-             // extracting it, so a version number can never silently resolve to
-             // different bytes than what was malware-scanned and reviewed.
-             $actualsha256 = hash_file('sha256', $downloadedfile);
-             echo "downloaded-sha256: $actualsha256\n";
-
-             $expectedsha256 = getenv('MOOSH_EXPECTED_SHA256');
-             if ($expectedsha256 !== false && trim($expectedsha256) !== '') {
-                 if (!hash_equals(strtolower(trim($expectedsha256)), strtolower($actualsha256))) {
-                     @unlink($downloadedfile);
-                     die("Refusing to install $pluginname: downloaded zip sha256 ($actualsha256) " .
-                         "does not match pinned checksum ($expectedsha256) for this version. " .
-                         "The file served for this version differs from what was scanned - " .
-                         "aborting before extraction.\n");
-                 }
-                 echo "sha256 checksum verified for $pluginname.\n";
-             } else {
-                 echo "No pinned sha256 for $pluginname (MOOSH_EXPECTED_SHA256 not set) - skipping verification.\n";
-             }
-
             if (!PluginCache::isValidZip($downloadedfile)) {
                 @unlink($downloadedfile);
                 die("Downloaded file from $downloadurl is not a valid, non-empty zip archive.\n");
             }
 
             PluginCache::store($component, $version->version, $downloadedfile);
+        }
+
+        // --- bip-plugins integrity check -----------------------------------
+        // Verify the zip about to be extracted against a pinned sha256 (if
+        // any) BEFORE extracting it, so a version number can never silently
+        // resolve to different bytes than what was malware-scanned and
+        // reviewed. Runs on cache hits too - a cached file is exactly as
+        // capable of being stale or tampered with as a freshly downloaded one.
+        try {
+            $this->verify_download_checksum($downloadedfile, $pluginname);
+        } catch (\RuntimeException $e) {
+            die($e->getMessage() . "\n");
         }
 
         $installpath = $this->get_install_path($type);
@@ -151,6 +142,43 @@ class PluginInstall extends MooshCommand
         echo "\tversion: $version->version\n";
         upgrade_noncore(true);
         echo "Done\n";
+    }
+
+    /**
+     * Verify a downloaded/cached plugin zip against a pinned sha256, if one
+     * is provided via the MOOSH_EXPECTED_SHA256 environment variable.
+     *
+     * Extracted from execute() so it can be unit tested in isolation - it
+     * throws rather than die()s so a test can assert on the failure instead
+     * of the process exiting; execute() converts the exception back into
+     * the usual CLI die() behaviour.
+     *
+     * @param string $downloadedfile path to the zip about to be extracted
+     * @param string $pluginname     plugin component name, for messages
+     * @throws \RuntimeException if MOOSH_EXPECTED_SHA256 is set and doesn't match
+     */
+    private function verify_download_checksum($downloadedfile, $pluginname)
+    {
+        $actualsha256 = hash_file('sha256', $downloadedfile);
+        echo "downloaded-sha256: $actualsha256\n";
+
+        $expectedsha256 = getenv('MOOSH_EXPECTED_SHA256');
+        if ($expectedsha256 === false || trim($expectedsha256) === '') {
+            echo "No pinned sha256 for $pluginname (MOOSH_EXPECTED_SHA256 not set) - skipping verification.\n";
+            return;
+        }
+
+        if (!hash_equals(strtolower(trim($expectedsha256)), strtolower($actualsha256))) {
+            @unlink($downloadedfile);
+            throw new \RuntimeException(
+                "Refusing to install $pluginname: downloaded zip sha256 ($actualsha256) " .
+                "does not match pinned checksum ($expectedsha256) for this version. " .
+                "The file served for this version differs from what was scanned - " .
+                "aborting before extraction."
+            );
+        }
+
+        echo "sha256 checksum verified for $pluginname.\n";
     }
 
     /**
