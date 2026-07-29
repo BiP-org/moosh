@@ -11,6 +11,8 @@
 namespace Moosh\Command\Generic\Plugin;
 use Moosh\MooshCommand;
 use Moosh\PluginCache;
+use Moosh\PluginChecksum;
+use Moosh\PluginZip;
 
 class PluginInstall extends MooshCommand
 {
@@ -108,7 +110,7 @@ class PluginInstall extends MooshCommand
         // reviewed. Runs on cache hits too - a cached file is exactly as
         // capable of being stale or tampered with as a freshly downloaded one.
         try {
-            $this->verify_download_checksum($downloadedfile, $pluginname);
+            PluginChecksum::verify($downloadedfile, $pluginname);
         } catch (\RuntimeException $e) {
             die($e->getMessage() . "\n");
         }
@@ -133,7 +135,11 @@ class PluginInstall extends MooshCommand
         run_external_command("unzip " . escapeshellarg($downloadedfile) . " -d " . escapeshellarg($unzipdir));
         run_external_command("rm " . escapeshellarg($downloadedfile));
 
-        $uncompresseddir = $this->find_plugin_root_dir($unzipdir);
+        try {
+            $uncompresseddir = PluginZip::findPluginRootDir($unzipdir);
+        } catch (\RuntimeException $e) {
+            die($e->getMessage() . "\n");
+        }
 
         run_external_command("mv " . escapeshellarg($uncompresseddir) . " " . escapeshellarg($targetpath));
         run_external_command("rm -rf " . escapeshellarg($workdir));
@@ -143,80 +149,6 @@ class PluginInstall extends MooshCommand
         echo "\tversion: $version->version\n";
         upgrade_noncore(true);
         echo "Done\n";
-    }
-
-    /**
-     * Verify a downloaded/cached plugin zip against a pinned sha256, if one
-     * is provided via the MOOSH_EXPECTED_SHA256 environment variable.
-     *
-     * Extracted from execute() so it can be unit tested in isolation - it
-     * throws rather than die()s so a test can assert on the failure instead
-     * of the process exiting; execute() converts the exception back into
-     * the usual CLI die() behaviour.
-     *
-     * @param string $downloadedfile path to the zip about to be extracted
-     * @param string $pluginname     plugin component name, for messages
-     * @throws \RuntimeException if MOOSH_EXPECTED_SHA256 is set and doesn't match
-     */
-    private function verify_download_checksum($downloadedfile, $pluginname)
-    {
-        $actualsha256 = hash_file('sha256', $downloadedfile);
-        echo "downloaded-sha256: $actualsha256\n";
-
-        $expectedsha256 = getenv('MOOSH_EXPECTED_SHA256');
-        if ($expectedsha256 === false || trim($expectedsha256) === '') {
-            echo "No pinned sha256 for $pluginname (MOOSH_EXPECTED_SHA256 not set) - skipping verification.\n";
-            return;
-        }
-
-        if (!hash_equals(strtolower(trim($expectedsha256)), strtolower($actualsha256))) {
-            @unlink($downloadedfile);
-            throw new \RuntimeException(
-                "Refusing to install $pluginname: downloaded zip sha256 ($actualsha256) " .
-                "does not match pinned checksum ($expectedsha256) for this version. " .
-                "The file served for this version differs from what was scanned - " .
-                "aborting before extraction."
-            );
-        }
-
-        echo "sha256 checksum verified for $pluginname.\n";
-    }
-
-    /**
-     * Find the shallowest plugin root directory containing a version.php file.
-     *
-     * @param string $unzipdir
-     * @return string
-     */
-    private function find_plugin_root_dir($unzipdir)
-    {
-        $versionfiles = array();
-        $iterator = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($unzipdir, \FilesystemIterator::SKIP_DOTS),
-            \RecursiveIteratorIterator::SELF_FIRST
-        );
-        foreach ($iterator as $fileinfo) {
-            if ($fileinfo->isFile() && $fileinfo->getFilename() === 'version.php') {
-                $versionfiles[] = $fileinfo->getPath();
-            }
-        }
-
-        if (empty($versionfiles)) {
-            die("The zipfile does not seem to be a valid plugin (no version.php found)\n");
-        }
-
-        usort($versionfiles, function($a, $b) {
-            $aDepth = substr_count(rtrim($a, DIRECTORY_SEPARATOR), DIRECTORY_SEPARATOR);
-            $bDepth = substr_count(rtrim($b, DIRECTORY_SEPARATOR), DIRECTORY_SEPARATOR);
-            return $aDepth <=> $bDepth;
-        });
-
-        $uncompresseddir = $versionfiles[0];
-        if (!file_exists($uncompresseddir)) {
-            die("The zipfile does not seem to be a valid plugin (no version.php found)\n");
-        }
-
-        return $uncompresseddir;
     }
 
     /**
