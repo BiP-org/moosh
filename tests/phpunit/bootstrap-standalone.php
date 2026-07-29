@@ -11,4 +11,6 @@ require_once __DIR__ . '/../../Moosh/PluginZip.php';
 require_once __DIR__ . '/../../Moosh/MooshCommand.php';
 require_once __DIR__ . '/../../Moosh/Command/Generic/Plugin/PluginInstall.php';
 require_once __DIR__ . '/../../Moosh/Command/Generic/Plugin/PluginDownload.php';
+require_once __DIR__ . '/../../Moosh/Command/Generic/Plugin/PluginList.php';
 require_once __DIR__ . '/../../Moosh/Command/Generic/Plugin/PluginClamscan.php';
+require_once __DIR__ . '/../../Moosh/Command/Generic/Plugin/PluginListUpdate.php';
