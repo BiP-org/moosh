@@ -70,3 +70,4 @@ jobs:
           repo: BiP-org/bip-plugins
           ref: 'main' # Replace with target branch if different
           token: '${{ secrets.BIP_BOT_GITHUB_ACTION_PAT }}'
+          inputs: '{"moosh_commit_sha": "${{ github.sha }}"}'
