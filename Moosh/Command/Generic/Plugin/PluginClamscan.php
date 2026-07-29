@@ -7,7 +7,7 @@
  * downloaded from the Moodle plugins directory by frankenstyle name.
  *
  * moosh plugin-clamscan [<plugin_name>] [-r <version>] [--proxy <uri>]
- *                        [-d <db>]... [-i] [--log <path>]
+ *                        [-t <token>] [-d <db>]... [-i] [--log <path>]
  *
  * Scan the plugin in the current directory
  * @example moosh plugin-clamscan
@@ -51,6 +51,7 @@ class PluginClamscan extends MooshCommand
 
         $this->addOption('r|release:', 'Specify exact version to scan e.g. 2019010700 (only used with a plugin name). Defaults to the newest available version.');
         $this->addOption('proxy:', 'Proxy URI scheme. Example: tcp://user:pass@host:port. You may also use env var http_proxy.');
+        $this->addOption('t|token:', 'Moodle Marketplace API token, used as a Bearer token for the download request. You may also use env var MOODLE_MARKETPLACE_TOKEN.');
 
         // --database can be given multiple times (clamscan -d/--database
         // itself accepts being repeated to load several databases/rulesets),

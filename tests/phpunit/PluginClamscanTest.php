@@ -222,6 +222,24 @@ final class PluginClamscanTest extends TestCase
         $this->assertContains(escapeshellarg('/rules/single'), $args);
     }
 
+    public function testBuildClamscanArgsIgnoresTokenOption(): void
+    {
+        // --token is only relevant to the download step (Marketplace auth),
+        // never to the clamscan invocation itself.
+        $command = $this->makeCommand();
+        $args = $this->callProtected($command, 'buildClamscanArgs', [
+            '/usr/bin/clamscan', '/tmp/plugin', ['token' => 'super-secret-token'],
+        ]);
+
+        $this->assertSame(
+            [escapeshellarg('/usr/bin/clamscan'), '-r', escapeshellarg('/tmp/plugin')],
+            $args
+        );
+        foreach ($args as $arg) {
+            $this->assertStringNotContainsString('super-secret-token', $arg);
+        }
+    }
+
     // --- resolvePluginVersion() ----------------------------------------------
 
     private function makePluginsData(array $plugins): \stdClass
