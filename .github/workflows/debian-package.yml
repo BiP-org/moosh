@@ -30,6 +30,21 @@ jobs:
           mkdir -p "$tmpdir/src"
           find . -mindepth 1 -maxdepth 1 \( ! -name '.build' ! -name '.git' ! -name '.github' \) -exec cp -a {} "$tmpdir/src/" \;
           cd "$tmpdir/src"
+
+          # 1. Extract base version from moosh.php
+          BASE_VERSION=$(grep -E "define\('MOOSH_VERSION'" moosh.php | cut -d"'" -f4)
+
+          # 2. Build dynamic version string
+          TIMESTAMP=$(date -u +'%Y%m%d%H%M%S')
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          PKG_VERSION="${BASE_VERSION}+git${TIMESTAMP}.${SHORT_SHA}-1"
+
+          # 3. Generate debian/changelog
+          mkdir -p debian
+          export DEBFULLNAME="GitHub Actions"
+          export DEBEMAIL="actions@github.com"
+          dch --create --package moosh -v "$PKG_VERSION" --distribution unstable "Automated build for commit ${SHORT_SHA}"
+
           chmod +x debian/rules
           dpkg-buildpackage -us -uc -b -d
           mkdir -p "$GITHUB_WORKSPACE/dist"
