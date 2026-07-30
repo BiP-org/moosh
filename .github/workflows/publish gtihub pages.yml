@@ -76,6 +76,7 @@ jobs:
           cd www
           bundle exec jekyll build \
             --destination ../public \
+            --baseurl "/${{ env.REPO_NAME }}" \
             --config _config.yml,<(echo "name: '${{ github.repository }}-fork'"; echo "title: '${{ github.repository }}-fork'")
         env:
           JEKYLL_ENV: production
