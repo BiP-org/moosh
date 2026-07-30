@@ -439,6 +439,57 @@ final class PluginListUpdateTest extends TestCase
         }
     }
 
+    // --- reconcileChecksum() ---------------------------------------------
+    // Only the offline-safe branches are covered here: anything that would
+    // genuinely need to download a zip is left to manual/integration
+    // testing, since PluginCache/file_get_contents/PluginChecksum aren't
+    // mockable through this reflection-based harness without touching real
+    // network I/O.
+
+    public function testReconcileChecksumSkipsDownloadWhenAlreadyPinnedAndNotForced(): void
+    {
+        $dir = $this->makeTempDir();
+        try {
+            file_put_contents($dir . '/checksum', "abc123\n");
+
+            $command = $this->makeCommand();
+            // An unreachable/invalid URL - if this method attempted to
+            // download it, we'd get a RuntimeException (or, on some setups,
+            // a hang/warning) instead of a clean null return.
+            $result = $this->callProtected($command, 'reconcileChecksum', [
+                'mod_board', $dir, '2024010100', 'http://invalid.invalid/nope.zip', false,
+            ]);
+
+            $this->assertNull($result);
+            $this->assertSame("abc123\n", file_get_contents($dir . '/checksum'));
+        } finally {
+            $this->removeDir($dir);
+        }
+    }
+
+    public function testReconcileChecksumRedownloadsWhenForcedEvenIfAlreadyPinned(): void
+    {
+        $dir = $this->makeTempDir();
+        try {
+            file_put_contents($dir . '/checksum', "stale-checksum-for-old-version\n");
+
+            $command = $this->makeCommand();
+            $this->expectException(\RuntimeException::class);
+            $this->expectExceptionMessageMatches('/could not pin checksum for 9999999999/');
+            // forcerecompute=true -> must not short-circuit on the existing
+            // (now-stale) checksum file, so this has to attempt (and fail) a
+            // real download. Uses a made-up version number so a stale,
+            // persistently-cached zip from an unrelated real run can't
+            // accidentally short-circuit PluginCache::fetch() and make the
+            // download "succeed".
+            $this->callProtected($command, 'reconcileChecksum', [
+                'mod_board', $dir, '9999999999', 'http://invalid.invalid/nope.zip', true,
+            ]);
+        } finally {
+            $this->removeDir($dir);
+        }
+    }
+
     public function testUpdatePackageComponentThrowsOnNonZeroExit(): void
     {
         $dir = $this->makeTempDir();
