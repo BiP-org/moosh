@@ -68,17 +68,28 @@ jobs:
       - name: Build Jekyll Documentation
         run: |
           cd www
-          bundle exec jekyll build --destination ../jekyll_site
+          bundle exec jekyll build --destination ../public
         env:
           JEKYLL_ENV: production
 
-      # Copy Jekyll output into public workspace
-      - name: Merge Jekyll Output
+      - name: Build Jekyll Documentation
         run: |
-          cp -r jekyll_site/* public/
+          cd www
+          bundle exec jekyll build --destination ../public
+        env:
+          JEKYLL_ENV: production
 
+      - name: 🔍 Debug - List public directory contents after Jekyll Site generation
+        run: |
+          if [ -d public ]; then
+            echo "::group::Directory contents of public/"
+            find public -type f
+            echo "::endgroup::"
+          else
+            echo "Directory 'public' does not exist yet."
+          fi
       # ----------------------------------------------------------------
-      # Generate APT Repository
+      # Generate APT Repository inside `public`
       # ----------------------------------------------------------------
       - name: Create apt repository
         uses: morph027/apt-repo-action@v3
@@ -93,9 +104,18 @@ jobs:
           components: ${{ env.COMPONENTS }}
           architectures: ${{ env.ARCHITECTURES }}
 
+      - name: 🔍 Debug - List public directory contents after APT Repository
+        run: |
+          if [ -d ../public ]; then
+            echo "::group::Directory contents of public/"
+            find ../public -type f
+            echo "::endgroup::"
+          else
+            echo "Directory '../public' does not exist yet."
+
       - name: Create INSTALL.md with installation instructions
         run: |
-          cat > ${{ steps.create-apt-repo.outputs.dir }}/INSTALL.md << 'EOF'
+          cat > public/INSTALL.md << 'EOF'
           # ${{ env.REPO_NAME }} Debian Repository
           
           This repository provides Debian packages for ${{ env.REPO_NAME }}.
@@ -136,7 +156,7 @@ jobs:
 
       - name: Create install.html
         run: |
-          cat > ${{ steps.create-apt-repo.outputs.dir }}/install.html << 'EOF'
+          cat > public/install.html << 'EOF'
           <!DOCTYPE html>
           <html lang="en">
           <head>
@@ -275,7 +295,7 @@ jobs:
                       <h2>Documentation</h2>
                       <p>For more information, see the full installation instructions:</p>
                       <div class="links">
-                          <a href="README.md" class="btn">📖 README</a>
+                          <a href="INSTALL.md" class="btn">📖 Installation Guide</a>
                       </div>
                   </div>
                   
@@ -286,7 +306,16 @@ jobs:
           </body>
           </html>
           EOF
-          cat ${{ steps.create-apt-repo.outputs.dir }}/install.html
+
+      - name: 🔍 Debug - List public directory contents after static file generation/fixation
+        run: |
+          if [ -d public ]; then
+            echo "::group::Directory contents of public/"
+            find public -type f
+            echo "::endgroup::"
+          else
+            echo "Directory 'public' does not exist yet."
+          fi
 
       - name: Setup Pages
         uses: actions/configure-pages@v6
@@ -295,9 +324,8 @@ jobs:
         uses: actions/upload-pages-artifact@v5
         with:
           name: github-pages
-          path: ${{ steps.create-apt-repo.outputs.dir }}
+          path: public
 
- 
   publish:
     environment:
       name: github-pages
@@ -317,7 +345,7 @@ jobs:
             echo '```bash'
             echo "curl -sfLo /tmp/${{ env.REPO_NAME }}.asc ${{ steps.deployment.outputs.page_url }}gpg.key"
             echo "sudo mv /tmp/${{ env.REPO_NAME }}.asc /etc/apt/keyrings/${{ env.REPO_NAME }}.asc"
-            echo "echo \"deb [signed-by=/etc/apt/keyrings/${{ env.REPO_NAME }}.asc] ${{ steps.deployment.outputs.page_url }} ${{ env.CODENAME }} ${{ env.COMPONENTS }}\" | sudo tee /etc/apt/sources.list.d/${{ env.REPO_NAME }}.list"
+            echo "echo \"deb [signed-by=/etc/apt/keyrings/${{ env.REPO_NAME }}.asc] ${{ steps.deployment.outputs.page_url }}${{ env.CODENAME }} ${{ env.COMPONENTS }}\" \vert{} sudo tee /etc/apt/sources.list.d/${{ env.REPO_NAME }}.list"
             echo 'sudo apt-get update'
             echo 'sudo apt-get install moosh'
             echo '```'
