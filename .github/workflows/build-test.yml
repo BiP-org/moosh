@@ -7,6 +7,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
+env:
+  MOODLE_DIR: "moodle"
+  MOODLE_REPOSITORY: "moodle/moodle"
+
 jobs:
 
   build:
@@ -38,26 +42,135 @@ jobs:
         image: ["8.2", "8.1", "8.0"]
     runs-on: ubuntu-latest
     container: php:${{ matrix.image }}-cli-alpine
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: moodle_password
+          MYSQL_DATABASE: moodledb
+          MYSQL_USER: moodleuser
+          MYSQL_PASSWORD: moodle_password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
     needs: build
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+
       - name: Remove vendor folder
         run:  rm -rf vendor
+
       - name: Download build
         uses: actions/download-artifact@v8
         with:
           name: moosh-vendor
+
       - name: Unzip build
         run: unzip vendor.zip
-      - name: Run test
+
+      - name: Run preliminary test
+        id: prelim_test
+        run: php moosh.php  2>&1|grep -Eq "version 1\."
+
+      - name: Run diagnostic
+        if: failure() && steps.prelim_test.outcome == 'failure'
+        run: php moosh.php
+
+
+        - name: Run test
         run: php moosh.php | grep "moosh version"
+
       - name: Lint files
         run: |
           ls    
           rm includes/config*class.php
           rm -rf vendor external
           find . -name '*.php' -not -path '*/Tests/fixtures/*' -not -path '*/external/*' -print0 | xargs -0 -n1 php -l
+
+      - name: Install dependencies & PHP extensions
+        run: |
+          apk add --no-cache bash git unzip zip grep mysql-client coreutils sudo
+          ADD_EXT_PATH=/usr/local/bin/install-php-extensions
+          curl -sSLf -o $ADD_EXT_PATH https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions
+          chmod +x $ADD_EXT_PATH
+          install-php-extensions mysqli pdo_mysql gd intl mbstring xml zip
+
+      - name: Configure PHP settings
+        run: |
+          echo "max_input_vars = 5000" >> /usr/local/etc/php/conf.d/moodle.ini
+
+      - name: Checkout Moodle Repository
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ env.MOODLE_REPOSITORY }}
+          path: ${{ env.MOODLE_DIR }}
+          ref: ${{ matrix.moodle_branch }}
+          fetch-depth: 1
+
+      - name: Install Moodle Instance
+        run: |
+          mkdir -p $HOME/moodledata
+          chmod 777 $HOME/moodledata
+
+          php $MOODLE_DIR/admin/cli/install.php \
+            --non-interactive \
+            --lang=en \
+            --wwwroot="http://localhost:8000" \
+            --dataroot="$HOME/moodledata" \
+            --dbtype=mysqli \
+            --dbhost=mysql \
+            --dbname=moodledb \
+            --dbuser=moodleuser \
+            --dbpass=moodle_password \
+            --fullname="Moosh Test Moodle" \
+            --shortname="moodle_test" \
+            --adminuser=admin \
+            --adminpass=Admin123! \
+            --agree-license
+
+      - name: Populating test data
+        run: |
+            php "tests/test_data_setup_moodle52/setup_testdata.php" $MOODLE_DIR
+
+      - name: Run all Test
+        env:
+          MOODLE_DIR: ${{ env.MOODLE_DIR }}
+          BASH_ENV: ${{ runner.temp }}/mariadb_aliases.sh
+        run: |
+          # 1. Create the alias setup file in the runner's temporary directory
+          cat << 'EOF' > "${{ runner.temp }}/mariadb_aliases.sh"
+          shopt -s expand_aliases
+          # Append flags to disable certificate verification for CLI tools
+          alias mysql='mariadb --skip-ssl-verify-server-cert'
+          alias mysqldump='mariadb-dump --skip-ssl-verify-server-cert'
+          alias mysqladmin='mariadb-admin --skip-ssl-verify-server-cert'
+          alias mysqlcheck='mariadb-check'
+          alias mysqlimport='mariadb-import'
+          alias mysqlshow='mariadb-show'
+          alias mysqlslap='mariadb-slap'
+          alias mysqlbinlog='mariadb-binlog'
+          alias mysql_upgrade='mariadb-upgrade'
+          EOF
+
+          # Start PHP built-in web server in the background
+          php -S 127.0.0.1:8000 -t "$MOODLE_DIR" > /dev/null 2>&1 &
+
+          # Store the process ID to kill it later if needed
+          SERVER_PID=$!
+
+          # Wait 2 seconds for the server to spin up
+          sleep 2
+
+          # 2. Run your test suite as normal
+          export PHP="$(which php)"
+          chmod +x tests/run_all_tests.sh
+          ./tests/run_all_tests.sh
+
 
   test-in-bip-plugins:
     runs-on: ubuntu-latest
