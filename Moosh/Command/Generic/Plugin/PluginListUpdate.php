@@ -11,7 +11,7 @@
  * after its Frankenstyle component (eg. block_fastnav/), holding a
  * `version` file that pins the version to install.
  *
- * moosh plugin-list-update [-d <directory>] [-v <release>] [-n] [component ...]
+ * moosh plugin-list-update [-d <directory>] [-v <release>] [-n] [--no-checksum] [component ...]
  *
  * Update every plugin directory found in the current directory
  * @example moosh plugin-list-update
@@ -41,7 +41,19 @@
  * (with the working directory and __config_plugin_directory /
  * __moodle_root_directory environment set up the same way
  * moodle_plugins_lib.rc's get_latest_plugin_version() does) instead of
- * consulting plugins.json.
+ * consulting plugins.json. Checksum pinning (see below) is not available
+ * for package_* components: there's no generic download URL to fetch
+ * from plugins.json for them.
+ *
+ * Checksum pinning: whenever a (non package_*) component's version file is
+ * created/updated, or already up to date but missing a `checksum` file, the
+ * resolved version's zip is downloaded once, verified via
+ * Moosh\PluginChecksum::verify() (honours MOOSH_EXPECTED_SHA256 the same
+ * way plugin-install/plugin-clamscan do - only meaningful when checking a
+ * single named component, since it's one global value for the whole run),
+ * and its sha256 is written to `<component>/checksum` next to `version` so
+ * a later install can pin that exact value. Pass --no-checksum to skip
+ * this (no downloads at all, `checksum` files are left untouched).
  *
  * @copyright  2012 onwards Tomasz Muras
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -50,6 +62,8 @@
 namespace Moosh\Command\Generic\Plugin;
 
 use Moosh\MooshCommand;
+use Moosh\PluginCache;
+use Moosh\PluginChecksum;
 
 class PluginListUpdate extends MooshCommand
 {
@@ -76,6 +90,7 @@ class PluginListUpdate extends MooshCommand
         $this->addOption('n|dry-run', "Report what would change, don't write any files.");
         $this->addOption('r|proxy:', 'Proxy URI scheme. Example: tcp://user:pass@host:port. You may also use env var http_proxy.');
         $this->addOption('t|token:', 'Moodle Marketplace API token, used as a Bearer token for the download request. You may also use env var MOODLE_MARKETPLACE_TOKEN.');
+        $this->addOption('no-checksum', "Don't download zips to pin a sha256 checksum next to version (skips Moosh\\PluginChecksum entirely).");
     }
 
     public function bootstrapLevel()
@@ -224,7 +239,114 @@ class PluginListUpdate extends MooshCommand
             $this->clearSupportStatus($componentdir);
         }
 
-        return $this->applyVersion($component, $versionfile, $currentversion, (string) $latest->version, $dryrun);
+        $message = $this->applyVersion($component, $versionfile, $currentversion, (string) $latest->version, $dryrun);
+
+        if (!$dryrun && empty($this->expandedOptions['no-checksum']) && strpos($message, 'SKIP   ') !== 0) {
+            // Recompute/pin whenever the version file actually changed just
+            // now; otherwise (the "OK already at latest" case) only backfill
+            // a checksum that isn't pinned yet - don't re-download on every
+            // run just to re-confirm nothing changed.
+            $versionchanged = (strpos($message, 'CREATE ') === 0 || strpos($message, 'UPDATE ') === 0);
+            $checksumline = $this->reconcileChecksum(
+                $component,
+                $componentdir,
+                (string) $latest->version,
+                $latest->downloadurl,
+                $versionchanged
+            );
+            if ($checksumline !== null) {
+                $message .= "\n" . $checksumline;
+            }
+        }
+
+        return $message;
+    }
+
+    /**
+     * Make sure `<componentdir>/checksum` holds the sha256 of $version's
+     * zip, downloading it (via the shared PluginCache, same as
+     * plugin-clamscan) only when that's not already the case.
+     *
+     * @param string $component
+     * @param string $componentdir
+     * @param string $version
+     * @param string $downloadurl
+     * @param bool   $forcerecompute true if $version was just written (so any
+     *   existing checksum file is necessarily for the old, no-longer-current
+     *   version and must be replaced regardless of its content)
+     * @return string|null a report line, or null if nothing needed doing
+     * @throws \RuntimeException if the zip can't be downloaded/verified
+     */
+    protected function reconcileChecksum($component, $componentdir, $version, $downloadurl, $forcerecompute)
+    {
+        $checksumfile = $componentdir . '/checksum';
+        $existing = $this->readVersionFile($checksumfile);
+        if (!$forcerecompute && $existing !== null) {
+            return null;
+        }
+
+        $tempdir = null;
+        try {
+            list($downloadedfile, $tempdir) = $this->downloadPluginZip($component, $version, $downloadurl);
+            PluginChecksum::verify($downloadedfile, $component);
+            $sha256 = hash_file('sha256', $downloadedfile);
+        } catch (\RuntimeException $e) {
+            throw new \RuntimeException("could not pin checksum for $version: " . $e->getMessage());
+        } finally {
+            if ($tempdir !== null && is_dir($tempdir)) {
+                exec('rm -rf ' . escapeshellarg($tempdir));
+            }
+        }
+
+        file_put_contents($checksumfile, $sha256 . "\n");
+
+        return "PIN    $component: checksum $sha256 for $version";
+    }
+
+    /**
+     * Download (or fetch from the shared cache) $component's zip for
+     * $version, same cache-then-HTTP flow as
+     * PluginClamscan::downloadAndExtractPlugin() - just without the unzip
+     * step, since only the raw bytes are needed here.
+     *
+     * @param string $component
+     * @param string $version
+     * @param string $downloadurl
+     * @return array [string $downloadedfile, string $tempdir] - caller must
+     *   remove $tempdir once done with it.
+     * @throws \RuntimeException
+     */
+    protected function downloadPluginZip($component, $version, $downloadurl)
+    {
+        $tempdir = rtrim(sys_get_temp_dir(), '/') . '/moosh-plugin-list-update-' . getmypid() . '-' . uniqid() . '/';
+        if (!file_exists($tempdir) && !mkdir($tempdir, 0755, true) && !is_dir($tempdir)) {
+            throw new \RuntimeException("Failed to create temp directory $tempdir.");
+        }
+
+        $downloadedfile = $tempdir . $component . '.zip';
+
+        if (PluginCache::fetch($component, $version, $downloadedfile)) {
+            return array($downloadedfile, $tempdir);
+        }
+
+        $contents = @file_get_contents(
+            $downloadurl,
+            false,
+            PluginDownload::createProxyContext($this->expandedOptions, $downloadurl)
+        );
+        if ($contents === false) {
+            throw new \RuntimeException("Failed to download plugin from $downloadurl.");
+        }
+        file_put_contents($downloadedfile, $contents);
+
+        if (!PluginCache::isValidZip($downloadedfile)) {
+            @unlink($downloadedfile);
+            throw new \RuntimeException("Downloaded file from $downloadurl is not a valid, non-empty zip archive.");
+        }
+
+        PluginCache::store($component, $version, $downloadedfile);
+
+        return array($downloadedfile, $tempdir);
     }
 
     /**
