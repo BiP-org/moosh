@@ -50,13 +50,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y wget gnupg
 
-      - name: Prepare repository directory
-        run: |
-          mkdir -p public
-          find dist -maxdepth 1 -type f -name '*.deb' -exec cp -v {} public/ \;
-
       # ----------------------------------------------------------------
-      # Build Jekyll Site (Before APT generation so files aren't wiped)
+      # Build Jekyll Site FIRST. Jekyll cleans its --destination dir
+      # before writing, so anything placed there earlier gets wiped.
+      # The .deb must be copied in AFTER this step, not before.
       # ----------------------------------------------------------------
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
@@ -72,12 +69,13 @@ jobs:
         env:
           JEKYLL_ENV: production
 
-      - name: Build Jekyll Documentation
+      # ----------------------------------------------------------------
+      # Now that Jekyll is done writing to `public`, drop the .deb in.
+      # ----------------------------------------------------------------
+      - name: Prepare repository directory
         run: |
-          cd www
-          bundle exec jekyll build --destination ../public
-        env:
-          JEKYLL_ENV: production
+          mkdir -p public
+          find dist -maxdepth 1 -type f -name '*.deb' -exec cp -v {} public/ \;
 
       - name: 🔍 Debug - List public directory contents after Jekyll Site generation
         run: |
@@ -88,8 +86,10 @@ jobs:
           else
             echo "Directory 'public' does not exist yet."
           fi
+
       # ----------------------------------------------------------------
-      # Generate APT Repository inside `public`
+      # Generate APT Repository (writes dists/pool/gpg.key to its own
+      # temp output dir - NOT into `public` - so it must be copied in)
       # ----------------------------------------------------------------
       - name: Create apt repository
         uses: morph027/apt-repo-action@v3
@@ -104,14 +104,20 @@ jobs:
           components: ${{ env.COMPONENTS }}
           architectures: ${{ env.ARCHITECTURES }}
 
+      - name: Merge apt repository output into public directory
+        run: |
+          mkdir -p public
+          cp -rv "${{ steps.create-apt-repo.outputs.dir }}"/. public/
+
       - name: 🔍 Debug - List public directory contents after APT Repository
         run: |
-          if [ -d ../public ]; then
+          if [ -d public ]; then
             echo "::group::Directory contents of public/"
-            find ../public -type f
+            find public -type f
             echo "::endgroup::"
           else
-            echo "Directory '../public' does not exist yet."
+            echo "Directory 'public' does not exist yet."
+          fi
 
       - name: Create INSTALL.md with installation instructions
         run: |
@@ -152,7 +158,7 @@ jobs:
           ```
           
           EOF
-          cat ${{ steps.create-apt-repo.outputs.dir }}/INSTALL.md
+          cat public/INSTALL.md
 
       - name: Create install.html
         run: |
