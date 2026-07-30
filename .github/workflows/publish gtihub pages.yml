@@ -356,14 +356,14 @@ jobs:
 
       - name: Adding summary
         run: |
-          {
-            echo ':rocket:'
-            echo ''
-            echo '```bash'
-            echo "curl -sfLo /tmp/${{ env.REPO_NAME }}.asc ${{ steps.deployment.outputs.page_url }}gpg.key"
-            echo "sudo mv /tmp/${{ env.REPO_NAME }}.asc /etc/apt/keyrings/${{ env.REPO_NAME }}.asc"
-            echo "echo \"deb [signed-by=/etc/apt/keyrings/${{ env.REPO_NAME }}.asc] ${{ steps.deployment.outputs.page_url }}${{ env.CODENAME }} ${{ env.COMPONENTS }}\" \vert{} sudo tee /etc/apt/sources.list.d/${{ env.REPO_NAME }}.list"
-            echo 'sudo apt-get update'
-            echo 'sudo apt-get install moosh'
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          cat << 'EOF' >> "$GITHUB_STEP_SUMMARY"
+          :rocket:
+
+          ```bash
+          curl -sfLo /tmp/${{ env.REPO_NAME }}.asc ${{ steps.deployment.outputs.page_url }}gpg.key
+          sudo mv /tmp/${{ env.REPO_NAME }}.asc /etc/apt/keyrings/${{ env.REPO_NAME }}.asc
+          echo "deb [signed-by=/etc/apt/keyrings/${{ env.REPO_NAME }}.asc] ${{ steps.deployment.outputs.page_url }}${{ env.CODENAME }} ${{ env.COMPONENTS }}" \vert{} sudo tee /etc/apt/sources.list.d/${{ env.REPO_NAME }}.list
+          sudo apt-get update
+          sudo apt-get install moosh
+          ```
+          EOF
