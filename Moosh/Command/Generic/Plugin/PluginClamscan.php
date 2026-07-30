@@ -104,7 +104,7 @@ class PluginClamscan extends MooshCommand
                 $pluginroot = $this->resolvePluginRootFromCwd($this->cwd);
             }
 
-            $exitcode = $this->runClamscan($clamscanBinary, $pluginroot);
+            $exitcode = $this->runClamscan($clamscanBinary, $pluginroot, $this->expandedOptions);
         } catch (\RuntimeException $e) {
             fwrite(STDERR, $e->getMessage() . "\n");
             $exitcode = self::EXIT_ERROR;
@@ -121,9 +121,13 @@ class PluginClamscan extends MooshCommand
      * Locate the clamscan binary. Extracted as resolveClamscanBinaryFromLookup()
      * for testability - this method itself is just the (untestable) OS call.
      *
+     * Public: reused by plugin-list-apply, which needs to check for
+     * clamscan's presence itself (its "not installed" handling is a soft
+     * skip, unlike this command's own "not installed" -> exit 2 contract).
+     *
      * @return string|null absolute path, or null if not found
      */
-    protected function findClamscanBinary()
+    public function findClamscanBinary()
     {
         return $this->resolveClamscanBinaryFromLookup(shell_exec('command -v clamscan 2>/dev/null'));
     }
@@ -201,13 +205,19 @@ class PluginClamscan extends MooshCommand
      * promises (0 clean, 1 malware found, 2 error), so they're passed
      * through as-is; anything unexpected is normalized to 2.
      *
+     * Public and takes $options explicitly (rather than reading
+     * $this->expandedOptions) so plugin-list-apply can reuse this directly
+     * against an already-installed plugin path with its own computed
+     * database list, without needing a real CLI option-parse to have run.
+     *
      * @param string $clamscanBinary
      * @param string $pluginroot
+     * @param array  $options database/infected/log, same shape as expandedOptions
      * @return int
      */
-    protected function runClamscan($clamscanBinary, $pluginroot)
+    public function runClamscan($clamscanBinary, $pluginroot, array $options = array())
     {
-        $args = $this->buildClamscanArgs($clamscanBinary, $pluginroot, $this->expandedOptions);
+        $args = $this->buildClamscanArgs($clamscanBinary, $pluginroot, $options);
         $command = implode(' ', $args) . ' 2>&1';
 
         exec($command, $output, $exitcode);
