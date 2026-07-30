@@ -43,6 +43,7 @@
 namespace Moosh\Command\Generic\Plugin;
 
 use Moosh\MooshCommand;
+use Moosh\PluginPathResolver;
 
 class PluginListApply extends MooshCommand
 {
@@ -51,6 +52,9 @@ class PluginListApply extends MooshCommand
 
     /** @var string absolute path to the declarative plugin list directory (--directory) */
     private $configPluginDirectory;
+
+    /** @var float resolved Moodle release, eg. 4.3 - used to resolve component install paths via core_component */
+    private $moodlerelease;
 
     /** @var \stdClass|null decoded plugins.json, cached for the duration of one execute() (only needed by the install_plugins.php fallback path / cannotdowngrade retries indirectly through getRequestedVersion) */
     private $pluginsdata;
