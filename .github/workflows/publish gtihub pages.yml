@@ -9,7 +9,7 @@ on:
     paths:
       - '.github/workflows/debian-apt-repo.yml'
   workflow_run:
-    workflows: ["Build and Test", "Build Debian package"]
+    workflows: ["Build Debian package"]
     types:
       - completed
     branches:
