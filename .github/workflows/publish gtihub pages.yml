@@ -132,11 +132,11 @@ jobs:
           ```
           
           EOF
-          cat ${{ steps.create-apt-repo.outputs.dir }}/README.md
+          cat ${{ steps.create-apt-repo.outputs.dir }}/INSTALL.md
 
-      - name: Create index.html
+      - name: Create install.html
         run: |
-          cat > ${{ steps.create-apt-repo.outputs.dir }}/index.html << 'EOF'
+          cat > ${{ steps.create-apt-repo.outputs.dir }}/install.html << 'EOF'
           <!DOCTYPE html>
           <html lang="en">
           <head>
@@ -286,7 +286,7 @@ jobs:
           </body>
           </html>
           EOF
-          cat ${{ steps.create-apt-repo.outputs.dir }}/index.html
+          cat ${{ steps.create-apt-repo.outputs.dir }}/install.html
 
       - name: Setup Pages
         uses: actions/configure-pages@v6
