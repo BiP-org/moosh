@@ -39,7 +39,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        image: ["8.2", "8.1", "8.0"]
+        image: ["8.3", "8.2", "8.1"]
+        moodle_branch: ["MOODLE_405_STABLE"]
     runs-on: ubuntu-latest
     container: php:${{ matrix.image }}-cli-alpine
     services:
@@ -81,10 +82,6 @@ jobs:
         if: failure() && steps.prelim_test.outcome == 'failure'
         run: php moosh.php
 
-
-        - name: Run test
-        run: php moosh.php | grep "moosh version"
-
       - name: Lint files
         run: |
           ls    
@@ -114,10 +111,10 @@ jobs:
 
       - name: Install Moodle Instance
         run: |
-          mkdir -p $HOME/moodledata
-          chmod 777 $HOME/moodledata
+          mkdir -p "$HOME/moodledata"
+          chmod 777 "$HOME/moodledata"
 
-          php $MOODLE_DIR/admin/cli/install.php \
+          php "$MOODLE_DIR/admin/cli/install.php" \
             --non-interactive \
             --lang=en \
             --wwwroot="http://localhost:8000" \
@@ -133,19 +130,14 @@ jobs:
             --adminpass=Admin123! \
             --agree-license
 
-      - name: Populating test data
-        run: |
-            php "tests/test_data_setup_moodle52/setup_testdata.php" $MOODLE_DIR
-
       - name: Run all Test
         env:
           MOODLE_DIR: ${{ env.MOODLE_DIR }}
           BASH_ENV: /tmp/mariadb_aliases.sh
         run: |
-          # 1. Create the alias setup file in the runner's temporary directory
-          cat << 'EOF' > "/tmp/mariadb_aliases.sh"
+          # 1. Create the alias setup file
+          cat << 'EOF' > /tmp/mariadb_aliases.sh
           shopt -s expand_aliases
-          # Append flags to disable certificate verification for CLI tools
           alias mysql='mariadb --skip-ssl-verify-server-cert'
           alias mysqldump='mariadb-dump --skip-ssl-verify-server-cert'
           alias mysqladmin='mariadb-admin --skip-ssl-verify-server-cert'
@@ -159,17 +151,12 @@ jobs:
 
           # Start PHP built-in web server in the background
           php -S 127.0.0.1:8000 -t "$MOODLE_DIR" > /dev/null 2>&1 &
-
-          # Store the process ID to kill it later if needed
-          SERVER_PID=$!
-
-          # Wait 2 seconds for the server to spin up
           sleep 2
-
           # 2. Run your test suite as normal
-          export PHP="$(which php)"
+          PHP="$(which php)"
+          export PHP
           chmod +x tests/run_all_tests.sh
-          ./tests/run_all_tests.sh
+          php ./tests/scripts/run-tests.php
 
 
   test-in-bip-plugins:
