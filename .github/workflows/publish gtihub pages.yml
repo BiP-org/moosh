@@ -65,7 +65,7 @@ jobs:
       - name: Build Jekyll Documentation
         run: |
           cd www
-          bundle exec jekyll build --destination ../public
+          bundle exec jekyll build --destination ../public --baseurl "/${{ env.REPO_NAME }}"
         env:
           JEKYLL_ENV: production
 
