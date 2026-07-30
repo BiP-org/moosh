@@ -2165,6 +2165,58 @@ Example 2: download all modules available for version 2.8 or later
 
     moosh plugin-list  | grep '^mod_' | grep 2.8 | grep -o '[^,]*$' | wget -i -
 
+plugin-list-update
+-------------------
+
+Keeps the `version` file of one or more locally tracked Frankenstyle plugin
+directories in sync with the latest version available on moodle.org that is
+compatible with a given Moodle version. It only updates the pinned version
+number - it does not download or install the plugin itself (see
+`plugin-install` for that).
+
+It expects one subdirectory per plugin, named after its Frankenstyle
+component (e.g. `block_fastnav/`, `mod_board/`), each holding a `version`
+file with the version that should be installed. With no plugin name given,
+every subdirectory of `-d` (default: current directory) is processed; give
+one or more plugin names as arguments to only update those.
+
+A `version` file containing `0` is left untouched (pinned/marked for
+uninstall). If no available version supports the target Moodle release, a
+`support_status` file is written next to `version` instead of being
+updated, and removed again once a compatible version exists.
+
+`package_*` directories are a special case: instead of consulting
+moodle.org, their own `bin/get_latest_plugin_version.sh` script is called
+to resolve the latest version.
+
+Unless `--no-checksum` is given, whenever a `version` file is created or
+updated (or is already up to date but missing a `checksum` file), the
+resolved version's zip is downloaded once and its sha256 is written to a
+`checksum` file next to `version`, so a later install can verify the bytes
+haven't changed since they were pinned. You may set the `MOOSH_EXPECTED_SHA256`
+env var to check that checksum against a specific value you already trust -
+only meaningful when updating a single named plugin, since it's one value
+for the whole command.
+
+You may specify a proxy server with the command line option or by defining
+the `http_proxy` env var.
+
+Example 1: update every plugin directory found in the current directory
+
+    moosh plugin-list-update
+
+Example 2: only update block_fastnav and mod_board, against Moodle 4.3
+
+    moosh plugin-list-update -v 4.3 block_fastnav mod_board
+
+Example 3: report what would change, without writing anything
+
+    moosh plugin-list-update -n
+
+Example 4: update without downloading zips to pin checksums
+
+    moosh plugin-list-update --no-checksum
+
 plugins-usage
 -------------
 
