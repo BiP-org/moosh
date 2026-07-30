@@ -3,12 +3,29 @@ name: Publish Debian Package to APT repository and documentation on github pages
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
+      - master
     paths:
       - '.github/workflows/debian-apt-repo.yml'
   workflow_run:
     workflows: ["Build and Test", "Build Debian package"]
     types:
       - completed
+    branches:
+      - main
+      - master
+
+jobs:
+  build:
+    # Restricts workflow_dispatch executions to main or master as well
+    if: >-
+      (github.event_name != 'workflow_dispatch' || github.ref_name == 'main' || github.ref_name == 'master') &&
+      (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
 permissions:
   contents: read
