@@ -1,4 +1,6 @@
 /vendor
+# But explicitly include vendor/moodlehq
+!vendor/moodlehq/
 composer.phar
 .idea
 .DS_Store
