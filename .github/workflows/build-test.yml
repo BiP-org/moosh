@@ -32,20 +32,25 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+
       - name: Trust the checked-out workspace
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Set composer package name to this repository and fix PHP Version 8.2 (Bookworm)
         run: |
           REPO_NAME=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
           sed -i "s#\"name\": \"tmuras/moosh\"#\"name\": \"${REPO_NAME}\"#" composer.json
           PHP_VERSION=8.2
-          sed -i 's/"php": "[^"]*"/"php": "\$PHP_VERSION"/' composer.json
+          sed -i "s/\"php\": \"[^\"]*\"/\"php\": \"$PHP_VERSION\"/" composer.json
+
       - name: Build code
         run: | 
          composer update
          composer install
+
       - name: Zip build
         run: zip -r vendor.zip vendor
+
       - name: Upload build
         uses: actions/upload-artifact@v7
         with:
