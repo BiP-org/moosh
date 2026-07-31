@@ -233,6 +233,10 @@ final class PluginListUpdateTest extends TestCase
                     ['version' => 2024010100, 'releases' => ['4.3']],
                 ]],
             ]));
+            // Only support-status clearing is under test here - the fixture
+            // above has no downloadurl, so skip checksum reconciliation
+            // (which would otherwise attempt a real download).
+            $this->setProtected($command, 'expandedOptions', ['no-checksum' => true]);
 
             $this->callProtected($command, 'updateStandardComponent', ['mod_board', $dir, false]);
 

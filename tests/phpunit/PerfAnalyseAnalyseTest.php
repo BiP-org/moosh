@@ -8,6 +8,6 @@ final class PerfAnalyseAnalyseTest extends TestCase
 {
     public function testCalculatorHoursForGivenDate(): void
     {
-        
+        $this->markTestIncomplete('PerfAnalyseAnalyse has no test coverage yet.');
     }
 }
