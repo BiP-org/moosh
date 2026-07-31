@@ -63,6 +63,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      - name: Install dependencies & PHP extensions
+        run: |
+          apk add --no-cache bash git unzip zip grep mysql-client coreutils sudo
+          ADD_EXT_PATH=/usr/local/bin/install-php-extensions
+          curl -sSLf -o $ADD_EXT_PATH https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions
+          chmod +x $ADD_EXT_PATH
+          install-php-extensions mysqli pdo_mysql gd intl mbstring xml zip
+
       - name: Remove vendor folder
         run:  rm -rf vendor
 
@@ -88,14 +96,6 @@ jobs:
           rm includes/config*class.php
           rm -rf vendor external
           find . -name '*.php' -not -path '*/Tests/fixtures/*' -not -path '*/external/*' -print0 | xargs -0 -n1 php -l
-
-      - name: Install dependencies & PHP extensions
-        run: |
-          apk add --no-cache bash git unzip zip grep mysql-client coreutils sudo
-          ADD_EXT_PATH=/usr/local/bin/install-php-extensions
-          curl -sSLf -o $ADD_EXT_PATH https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions
-          chmod +x $ADD_EXT_PATH
-          install-php-extensions mysqli pdo_mysql gd intl mbstring xml zip
 
       - name: Configure PHP settings
         run: |
