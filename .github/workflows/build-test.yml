@@ -24,7 +24,7 @@ jobs:
 
       - name: Install dependencies & PHP extensions
         run: |
-          apt-get update && apt-get install -y clamav
+          apk update && apk add clamav
 #          ADD_EXT_PATH=/usr/local/bin/install-php-extensions
 #          curl -sSLf -o $ADD_EXT_PATH https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions
 #          chmod +x $ADD_EXT_PATH
