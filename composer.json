@@ -249,6 +249,9 @@
     "nikic/php-parser": "^3.0",
     "moodlehq/moodle-local_amos": "dev-main"
   },
+  "require-dev": {
+    "phpunit/phpunit": "^10.5"
+  },
   "bin": [
     "moosh.php"
   ]
