@@ -70,7 +70,7 @@ jobs:
           curl -sSLf -o $ADD_EXT_PATH https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions
           chmod +x $ADD_EXT_PATH
           install-php-extensions mysqli pdo_mysql gd intl mbstring xml zip
-
+    
       - name: Remove vendor folder
         run:  rm -rf vendor
 
@@ -155,7 +155,8 @@ jobs:
           # 2. Run your test suite as normal
           PHP="$(which php)"
           export PHP
-          php ./tests/scripts/run-tests.php
+          cd tests/scripts
+          php run-tests.php
 
 
   test-in-bip-plugins:
