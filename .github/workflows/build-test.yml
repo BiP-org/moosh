@@ -45,7 +45,7 @@ jobs:
 
       - name: Build code
         run: | 
-         composer update
+         composer update --with-all-dependencies
          composer install
 
       - name: Zip build
