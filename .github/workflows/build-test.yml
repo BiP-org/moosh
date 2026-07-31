@@ -155,7 +155,6 @@ jobs:
           # 2. Run your test suite as normal
           PHP="$(which php)"
           export PHP
-          chmod +x tests/run_all_tests.sh
           php ./tests/scripts/run-tests.php
 
 
