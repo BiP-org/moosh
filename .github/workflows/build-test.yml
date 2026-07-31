@@ -73,7 +73,7 @@ jobs:
       matrix:
         image: ["8.3", "8.2", "8.1"]
         moodle_branch: ["MOODLE_405_STABLE"]
-    needs: unit-tests
+    needs: [unit-tests, build]
     runs-on: ubuntu-latest
     container: php:${{ matrix.image }}-cli-alpine
     services:
@@ -91,7 +91,6 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
-    needs: build
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
