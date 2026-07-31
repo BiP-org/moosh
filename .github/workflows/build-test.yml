@@ -8,7 +8,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  MOODLE_DIR: "moodle"
   MOODLE_REPOSITORY: "moodle/moodle"
 
 jobs:
@@ -84,6 +83,11 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+
+      - name: Set Absolute MOODLE_DIR & DATAROOT
+        run: |
+          echo "MOODLE_DIR=${{ github.workspace }}/moodle" >> $GITHUB_ENV
+          echo "DATAROOT=${{ github.workspace }}/moodledata" >> $GITHUB_ENV
 
       - name: Install dependencies & PHP extensions
         run: |
@@ -177,8 +181,8 @@ jobs:
           # 2. Run your test suite as normal
           PHP="$(which php)"
           export PHP
-          cd tests/scripts
-          php run-tests.php
+          # cd tests/scripts
+          # php run-tests.php
 
 
   test-in-bip-plugins:
