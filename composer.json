@@ -5,7 +5,7 @@
   "homepage": "http://moosh-online.com",
   "config": {
     "platform": {
-      "php": "7.2.5"
+      "php": "8.1"
     }
   },
   "keywords": [
@@ -246,7 +246,7 @@
     "symfony/finder": "^2.7",
     "danielneis/moodle-local_newlocal": "dev-master#b9596bdd37963d312069a048c8d315c7592c1c24",
     "danielneis/moodle-enrol_newenrol": "dev-master",
-    "nikic/php-parser": "^3.0",
+    "nikic/php-parser": "^4.0",
     "moodlehq/moodle-local_amos": "dev-main"
   },
   "require-dev": {
