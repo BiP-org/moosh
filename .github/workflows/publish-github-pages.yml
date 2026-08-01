@@ -8,7 +8,7 @@ on:
       - master
     paths:
       - '.github/workflows/publish-github-pages.yml'
-      - 'www/*'
+      - 'www/**'
   workflow_run:
     workflows: ["Build Debian package"]
     types:
@@ -58,7 +58,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y wget gnupg gh
-
 
       - name: Determine artifact run ID
         id: get-run-id
