@@ -9,7 +9,6 @@ on:
     paths:
       - '.github/workflows/publish-github-pages.yml'
       - 'www/*'
-  workflow_run:
 
 permissions:
   contents: read
