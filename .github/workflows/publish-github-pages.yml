@@ -66,45 +66,32 @@ jobs:
           else
             echo "Triggered by push/dispatch. Searching for latest 'debian-package' artifact..."
             
-            # Use curl (always available) to fetch artifacts list
-            echo "Fetching artifact list via curl..."
+            # Fetch artifacts list
             ARTIFACTS_JSON=$(curl -s -H "Authorization: token ${{ github.token }}" \
               -H "Accept: application/vnd.github.v3+json" \
               "https://api.github.com/repos/${{ github.repository }}/actions/artifacts")
             
-            # Check if the response is valid JSON
-            if ! echo "$ARTIFACTS_JSON" | jq empty 2>/dev/null; then
-              echo "ERROR: Invalid JSON response from artifacts API."
-              echo "Response: $ARTIFACTS_JSON"
-              exit 1
-            fi
-            
-            # Extract artifact ID for 'debian-package' with the highest ID (latest)
-            # We sort by ID numerically and take the last one
+            # Extract artifact ID for 'debian-package' with the highest ID
             ARTIFACT_ID=$(echo "$ARTIFACTS_JSON" | jq -r '.artifacts[] | select(.name == "debian-package") | .id' | sort -n | tail -n 1)
             
             if [ -z "$ARTIFACT_ID" ] || [ "$ARTIFACT_ID" == "null" ]; then
-              echo "ERROR: No artifact named 'debian-package' found in the repository."
-              echo "Available artifacts:"
-              echo "$ARTIFACTS_JSON" | jq -r '.artifacts[].name'
+              echo "ERROR: No artifact named 'debian-package' found."
               exit 1
             fi
             
             echo "Found artifact ID: $ARTIFACT_ID"
             
-            # Fetch details for the specific artifact to get run_id
-            # The artifact object should contain 'run_id'
+            # Fetch details for the specific artifact
             ARTIFACT_DETAILS=$(curl -s -H "Authorization: token ${{ github.token }}" \
               -H "Accept: application/vnd.github.v3+json" \
               "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID")
             
-            # Extract run_id
-            RUN_ID=$(echo "$ARTIFACT_DETAILS" | jq -r '.run_id')
+            # FIX: Extract run_id from workflow_run.id, not run_id
+            RUN_ID=$(echo "$ARTIFACT_DETAILS" | jq -r '.workflow_run.id')
             
             if [ -z "$RUN_ID" ] || [ "$RUN_ID" == "null" ]; then
-              echo "ERROR: Could not extract 'run_id' from artifact details."
-              echo "Artifact details JSON:"
-              echo "$ARTIFACT_DETAILS"
+              echo "ERROR: Could not extract run_id from workflow_run object."
+              echo "Details: $ARTIFACT_DETAILS"
               exit 1
             fi
             
