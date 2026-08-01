@@ -41,9 +41,14 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v7
 
-      - name: Update moosh2 link
+      - name: Update links for repository forks
         run: |
+         # Set href to the forked moosh2 repository
          sed -i "/moosh2/ s|href=\"{{ site.baseurl }}/moosh2\"|href=\"https://${GITHUB_REPOSITORY_OWNER}.github.io/moosh2\"|g" www/_includes/header.html
+         # Update Header to point to the correct github repo
+         sed -i "s|href=\"https://github.com/tmuras/moosh\"|href=\"https://github.com/${GITHUB_REPOSITORY_OWNER}/${GITHUB_REPOSITORY}\"|g" www/_includes/header.html
+         # update image href
+         sed -i -E "s|\!\[([^]]*)\]\(/images/([^)]+\.png)\)|![\1](https://github.com/${{ github.repository }}/raw/${{ github.event.repository.default_branch }}/images/\2)|g" www/index.md
 
       - name: Create Distribution Directory
         run: |
