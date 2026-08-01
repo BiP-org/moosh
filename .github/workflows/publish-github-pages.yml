@@ -7,14 +7,9 @@ on:
       - main
       - master
     paths:
-      - '.github/workflows/debian-apt-repo.yml'
+      - '.github/workflows/publish-github-pages.yml'
+      - 'www/*'
   workflow_run:
-    workflows: ["Build Debian package"]
-    types:
-      - completed
-    branches:
-      - main
-      - master
 
 permissions:
   contents: read
@@ -38,7 +33,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+
+      - name: Update moosh2 link
+        run: |
+         sed -i "/moosh2/ s|href=\"{{ site.baseurl }}/moosh2\"|href=\"https://www.github.com/${GITHUB_REPOSITORY_OWNER}/moosh2\"|g" www\_includes\header.html
 
       - name: Create Distribution Directory
         run: |
