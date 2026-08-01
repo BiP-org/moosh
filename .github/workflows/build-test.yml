@@ -2,6 +2,9 @@ name: Build and Test
 
 on:
   push:
+    paths-ignore:
+      - 'www/**'
+      - '.github/workflows/publish-github-pages.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
