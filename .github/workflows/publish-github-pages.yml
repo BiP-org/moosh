@@ -49,35 +49,62 @@ jobs:
         run: |
           mkdir -p dist
 
+      - name: Install package publishing tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget gnupg gh
+
+
       - name: Determine artifact run ID
         id: get-run-id
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          # Check if triggered by a specific workflow run (e.g., debian-package.yml)
+          echo "Event Name: ${{ github.event_name }}"
+          
           if [ "${{ github.event_name }}" == "workflow_run" ]; then
             echo "Triggered by workflow_run. Using run ID: ${{ github.event.workflow_run.id }}"
             echo "run_id=${{ github.event.workflow_run.id }}" >> $GITHUB_OUTPUT
           else
             echo "Triggered by push/dispatch. Searching for latest 'debian-package' artifact..."
             
-            # Use gh CLI to find the latest artifact named 'debian-package'
-            # 1. List artifacts, filter by name, get the one with the highest ID (latest)
-            # 2. Fetch details of that specific artifact to get its run_id
-            ARTIFACT_ID=$(gh api repos/${{ github.repository }}/actions/artifacts \
-              --jq '[.artifacts[] | select(.name == "debian-package") | .id] | sort | last')
-              
-            if [ -z "$ARTIFACT_ID" ]; then
-              echo "Error: No artifact named 'debian-package' found in the repository."
+            # 2. Authenticate (usually pre-authenticated in CI, but explicit doesn't hurt)
+            gh auth status # Optional debug
+            
+            # 3. List artifacts and find the one with the highest ID
+            # We filter by name 'debian-package'
+            echo "Fetching artifact list..."
+            ARTIFACT_JSON=$(gh api repos/${{ github.repository }}/actions/artifacts --jq '.artifacts[] | select(.name == "debian-package")')
+            
+            if [ -z "$ARTIFACT_JSON" ]; then
+              echo "ERROR: No artifact named 'debian-package' found in the repository."
+              echo "Available artifacts:"
+              gh api repos/${{ github.repository }}/actions/artifacts --jq '.artifacts[].name'
               exit 1
             fi
             
-            # Get the run_id associated with this artifact
+            # 4. Get the ID of the latest artifact (sort by created_at or id, usually id is sufficient)
+            # We extract the ID with the highest value
+            ARTIFACT_ID=$(echo "$ARTIFACT_JSON" | jq -s 'sort_by(.id) | last | .id')
+            
+            if [ -z "$ARTIFACT_ID" ]; then
+              echo "ERROR: Could not extract artifact ID."
+              exit 1
+            fi
+            
+            echo "Found artifact ID: $ARTIFACT_ID"
+            
+            # 5. Get the run_id associated with this artifact
             TARGET_RUN_ID=$(gh api repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID --jq '.run_id')
+            
+            if [ -z "$TARGET_RUN_ID" ]; then
+              echo "ERROR: Could not extract run_id from artifact details."
+              exit 1
+            fi
             
             echo "Found latest artifact from run ID: $TARGET_RUN_ID"
             echo "run_id=$TARGET_RUN_ID" >> $GITHUB_OUTPUT
           fi
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Download Debian package artifact
         uses: actions/download-artifact@v8
@@ -87,11 +114,6 @@ jobs:
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
           run-id: ${{ steps.get-run-id.outputs.run_id }}
-
-      - name: Install package publishing tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y wget gnupg
 
       # ----------------------------------------------------------------
       # Build Jekyll Site FIRST. Jekyll cleans its --destination dir
