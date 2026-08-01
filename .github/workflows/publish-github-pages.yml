@@ -47,7 +47,7 @@ jobs:
          sed -i "/moosh2/ s|href=\"{{ site.baseurl }}/moosh2\"|href=\"https://${GITHUB_REPOSITORY_OWNER}.github.io/moosh2\"|g" www/_includes/header.html
          sed -i "s#>moosh2<#>BiP-org/moosh2(fork)<#" www/_includes/header.html
          # Update Header to point to the correct github repo
-         sed -i "s|href=\"https://github.com/tmuras/moosh\"|href=\"https://github.com/${GITHUB_REPOSITORY_OWNER}/${GITHUB_REPOSITORY}\"|g" www/_includes/header.html
+         sed -i "s|href=\"https://github.com/tmuras/moosh\"|href=\"https://github.com/${GITHUB_REPOSITORY}\"|g" www/_includes/header.html
          # update image href
          sed -i -E "s|\!\[([^]]*)\]\(/images/([^)]+\.png)\)|![\1](https://github.com/${{ github.repository }}/raw/${{ github.event.repository.default_branch }}/images/\2)|g" www/index.md
 
