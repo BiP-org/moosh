@@ -9,6 +9,13 @@ on:
     paths:
       - '.github/workflows/publish-github-pages.yml'
       - 'www/*'
+  workflow_run:
+    workflows: ["Build Debian package"]
+    types:
+      - completed
+    branches:
+      - main
+      - master
 
 permissions:
   contents: read
@@ -43,14 +50,51 @@ jobs:
           mkdir -p dist
 
       - name: Download Debian package artifact
-        continue-on-error: true
-        uses: actions/download-artifact@v8
-        with:
-          name: debian-package
-          path: dist
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          run-id: ${{ github.event.workflow_run.id || github.run_id }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEBIAN_ARTIFACT_NAME: debian-package
+          DEB_OUTPUT_PATH: dist
+        run: |
+          # Determine if we were triggered by a specific workflow run (debian-package.yml)
+          # or by a manual push/dispatch.
+          
+          if [ "${{ github.event_name }}" == "workflow_run" ]; then
+            echo "Triggered by workflow_run: Using specific run-id '${{ github.event.workflow_run.id }}'"
+            RUN_ID="${{ github.event.workflow_run.id }}"
+          else
+            echo "Triggered by push/dispatch: Searching for latest artifact..."
+            
+            # Use gh CLI to find the latest artifact named 'debian-package'
+            # This searches across all runs in the repository
+            ARTIFACT_ID=$(gh api repos/${{ github.repository }}/actions/artifacts \
+              --jq '[.artifacts[] | select(.name == env.DEBIAN_ARTIFACT_NAME) | .id] | sort | last')
+              
+            if [ -z "$ARTIFACT_ID" ]; then
+              echo "Error: No artifact named '$DEBIAN_ARTIFACT_NAME' found in the repository."
+              exit 1
+            fi
+            
+            # The 'gh artifact download' command requires the run ID associated with the artifact
+            # The API response above gives the artifact ID, but 'download' needs the run ID.
+            # We need to fetch the specific artifact details to get the run_id
+            RUN_ID=$(gh api repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID \
+              --jq '.run_id')
+              
+            echo "Found latest artifact. Run ID: $RUN_ID"
+          fi
+
+          # Now use the standard action with the calculated RUN_ID
+          echo "Downloading artifact to '$DEB_OUTPUT_PATH' using run-id: $RUN_ID"
+          
+          # Note: The download-artifact action expects 'run-id' to be a number or 'current'
+          # We pass the calculated ID
+          uses: actions/download-artifact@v8
+          with:
+            name: ${{ env.DEBIAN_ARTIFACT_NAME }}
+            path: ${{ env.DEB_OUTPUT_PATH }}
+            github-token: ${{ env.GH_TOKEN }}
+            repository: ${{ github.repository }}
+            run-id: $RUN_ID
 
       - name: Install package publishing tools
         run: |
