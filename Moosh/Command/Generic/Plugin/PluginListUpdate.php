@@ -55,6 +55,20 @@
  * a later install can pin that exact value. Pass --no-checksum to skip
  * this (no downloads at all, `checksum` files are left untouched).
  *
+ * Marketplace-subscription plugins: plugins.json lists some plugins (and
+ * "latest" versions for them) that are only downloadable from
+ * marketplace.moodle.com with a token entitled to a paid subscription;
+ * without one, the download responds HTTP 401
+ * ({"code":401,"message":"Not privileged to request the resource."}).
+ * Before writing a new/updated `version` for a component, this command
+ * confirms the resolved zip is actually downloadable with the configured
+ * --token/MOODLE_MARKETPLACE_TOKEN. If that download 401s, the component is
+ * left exactly as it was on disk (existing `version` untouched, no file
+ * created if there wasn't one) and a warning is reported instead - either a
+ * GitHub Actions `::warning::` annotation when running in CI (`$CI` set) or
+ * a plain "WARNING" line otherwise. This check is skipped entirely when
+ * --no-checksum is given, same as all other download activity.
+ *
  * @copyright  2012 onwards Tomasz Muras
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -64,6 +78,7 @@ namespace Moosh\Command\Generic\Plugin;
 use Moosh\MooshCommand;
 use Moosh\PluginCache;
 use Moosh\PluginChecksum;
+use Moosh\Command\Generic\Plugin\MarketplaceUnauthorizedException;
 
 class PluginListUpdate extends MooshCommand
 {
@@ -235,31 +250,131 @@ class PluginListUpdate extends MooshCommand
             return "SKIP   $component: no version supports Moodle {$this->moodlerelease}";
         }
 
+        $latestversion = (string) $latest->version;
+        $checksumenabled = empty($this->expandedOptions['no-checksum']);
+
+        // Before writing anything, confirm the resolved version is actually
+        // downloadable with the configured Marketplace token. plugins.json
+        // lists subscription-only plugins the same as any other, but their
+        // download 401s without an entitled token - pinning a version we
+        // can't ourselves fetch would silently break a later install for
+        // it. Only relevant when this run would actually change `version`;
+        // an already-up-to-date component has nothing to lose here (a
+        // missing checksum backfill failing the same way is handled below,
+        // once we know a version write is not on the table).
+        if ($checksumenabled && !$dryrun && $this->willChangeVersion($currentversion, $latestversion)) {
+            try {
+                $this->downloadPluginZip($component, $latestversion, $latest->downloadurl);
+            } catch (MarketplaceUnauthorizedException $e) {
+                return $this->reportMarketplaceUnauthorized($component, $currentversion, $latestversion);
+            }
+        }
+
         if (!$dryrun) {
             $this->clearSupportStatus($componentdir);
         }
 
-        $message = $this->applyVersion($component, $versionfile, $currentversion, (string) $latest->version, $dryrun);
+        $message = $this->applyVersion($component, $versionfile, $currentversion, $latestversion, $dryrun);
 
-        if (!$dryrun && empty($this->expandedOptions['no-checksum']) && strpos($message, 'SKIP   ') !== 0) {
+        if ($checksumenabled && !$dryrun && strpos($message, 'SKIP   ') !== 0) {
             // Recompute/pin whenever the version file actually changed just
             // now; otherwise (the "OK already at latest" case) only backfill
             // a checksum that isn't pinned yet - don't re-download on every
-            // run just to re-confirm nothing changed.
+            // run just to re-confirm nothing changed. Either way, the zip
+            // for a real version change was already proven downloadable
+            // above (and is now cached), so only a checksum-only backfill
+            // can still 401 here.
             $versionchanged = (strpos($message, 'CREATE ') === 0 || strpos($message, 'UPDATE ') === 0);
-            $checksumline = $this->reconcileChecksum(
-                $component,
-                $componentdir,
-                (string) $latest->version,
-                $latest->downloadurl,
-                $versionchanged
-            );
+            try {
+                $checksumline = $this->reconcileChecksum($component, $componentdir, $latestversion, $latest->downloadurl, $versionchanged);
+            } catch (MarketplaceUnauthorizedException $e) {
+                $checksumline = $this->marketplaceUnauthorizedAnnotation(
+                    $component,
+                    "not privileged to download version $latestversion from the Moodle Marketplace (HTTP 401) to pin its checksum - the plugin likely requires a subscription/entitlement the configured --token doesn't cover"
+                );
+            }
             if ($checksumline !== null) {
                 $message .= "\n" . $checksumline;
             }
         }
 
         return $message;
+    }
+
+    /**
+     * Whether applyVersion() would actually write $versionfile, given
+     * $currentversion and $latestversion - without writing anything itself.
+     * Mirrors applyVersion()'s own branching (pinned-to-0 is handled by the
+     * caller before this is relevant).
+     *
+     * @param string|null $currentversion
+     * @param string      $latestversion
+     * @return bool
+     */
+    protected function willChangeVersion($currentversion, $latestversion)
+    {
+        if ($currentversion === null) {
+            return true;
+        }
+        if ($currentversion === $latestversion) {
+            return false;
+        }
+        if ((int) $currentversion > (int) $latestversion) {
+            return false; // applyVersion() never downgrades a locally newer/pinned version.
+        }
+        return true;
+    }
+
+    /**
+     * Build the report line for a component whose resolved zip 401s
+     * (Marketplace subscription required) *before* any version write was
+     * attempted - the version file (if any) is left exactly as it was.
+     *
+     * @param string      $component
+     * @param string|null $currentversion
+     * @param string      $latestversion
+     * @return string
+     */
+    protected function reportMarketplaceUnauthorized($component, $currentversion, $latestversion)
+    {
+        $kept = $currentversion === null
+            ? 'leaving version file unwritten'
+            : "keeping local version $currentversion";
+        $reason = "not privileged to download version $latestversion from the Moodle Marketplace (HTTP 401) - "
+            . "the plugin likely requires a subscription/entitlement the configured --token doesn't cover";
+
+        return "SKIP   $component: $reason, $kept\n" . $this->marketplaceUnauthorizedAnnotation($component, $reason);
+    }
+
+    /**
+     * A single warning line about a Marketplace 401, either as a GitHub
+     * Actions `::warning::` workflow command (when $CI is set - see
+     * https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions)
+     * or a plain "WARNING" line otherwise.
+     *
+     * @param string $component
+     * @param string $reason
+     * @return string
+     */
+    protected function marketplaceUnauthorizedAnnotation($component, $reason)
+    {
+        if ($this->isRunningInCi()) {
+            return '::warning title=Moodle Marketplace subscription required::' . $component . ': ' . $reason;
+        }
+        return "WARNING $component: $reason";
+    }
+
+    /**
+     * @return bool whether $CI looks set to a truthy value, as GitHub
+     *   Actions (and most other CI providers) do.
+     */
+    protected function isRunningInCi()
+    {
+        $ci = getenv('CI');
+        if ($ci === false || $ci === '') {
+            return false;
+        }
+        return !in_array(strtolower($ci), array('false', '0'), true);
     }
 
     /**
@@ -290,6 +405,10 @@ class PluginListUpdate extends MooshCommand
             list($downloadedfile, $tempdir) = $this->downloadPluginZip($component, $version, $downloadurl);
             PluginChecksum::verify($downloadedfile, $component);
             $sha256 = hash_file('sha256', $downloadedfile);
+        } catch (MarketplaceUnauthorizedException $e) {
+            // Let the caller distinguish "not privileged" from any other
+            // download failure - don't wrap it into a generic RuntimeException.
+            throw $e;
         } catch (\RuntimeException $e) {
             throw new \RuntimeException("could not pin checksum for $version: " . $e->getMessage());
         } finally {
@@ -334,7 +453,19 @@ class PluginListUpdate extends MooshCommand
             false,
             PluginDownload::createProxyContext($this->expandedOptions, $downloadurl)
         );
+        // PHP's http:// stream wrapper populates $http_response_header as a
+        // side effect of the call above, in this same scope, even when the
+        // request fails with an HTTP error status - capture it immediately,
+        // before anything else can run.
+        $responseheaders = isset($http_response_header) ? $http_response_header : null;
+
         if ($contents === false) {
+            if ($this->isMarketplaceUnauthorizedResponse($responseheaders)) {
+                throw new MarketplaceUnauthorizedException(
+                    "Not privileged to download $downloadurl (HTTP 401) - this plugin appears to require a "
+                    . "Moodle Marketplace subscription/entitlement the configured --token doesn't cover."
+                );
+            }
             throw new \RuntimeException("Failed to download plugin from $downloadurl.");
         }
         file_put_contents($downloadedfile, $contents);
@@ -347,6 +478,29 @@ class PluginListUpdate extends MooshCommand
         PluginCache::store($component, $version, $downloadedfile);
 
         return array($downloadedfile, $tempdir);
+    }
+
+    /**
+     * @param array|null $responseheaders as populated by PHP's http://
+     *   stream wrapper into $http_response_header (a raw status line plus
+     *   header lines, eg. "HTTP/1.1 401 Unauthorized"), or null if no HTTP
+     *   response was received at all (eg. connection failure).
+     * @return bool whether the response's status line was HTTP 401,
+     *   matching the marketplace.moodle.com
+     *   {"code":401,"message":"Not privileged to request the resource."}
+     *   response for subscription-only plugins.
+     */
+    protected function isMarketplaceUnauthorizedResponse($responseheaders)
+    {
+        if (!is_array($responseheaders)) {
+            return false;
+        }
+        foreach ($responseheaders as $header) {
+            if (preg_match('#^HTTP/\S+\s+401(\s|$)#', (string) $header)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

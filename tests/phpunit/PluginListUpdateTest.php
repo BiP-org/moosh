@@ -2,9 +2,119 @@
 
 use PHPUnit\Framework\TestCase;
 use Moosh\Command\Generic\Plugin\PluginListUpdate;
+use Moosh\Command\Generic\Plugin\MarketplaceUnauthorizedException;
 
 final class PluginListUpdateTest extends TestCase
 {
+    /**
+     * @var resource|null process handle for the loopback 401 server started
+     *   by startUnauthorizedServer(), so tests can tear it down again.
+     */
+    private static $unauthorizedServerProcess = null;
+
+    /** @var string|null base URL of the running loopback 401 server, eg. 'http://127.0.0.1:51234' */
+    private static $unauthorizedServerBaseUrl = null;
+
+    public static function tearDownAfterClass(): void
+    {
+        self::stopUnauthorizedServer();
+    }
+
+    /**
+     * Start (once, lazily, reused across tests) a PHP built-in web server on
+     * 127.0.0.1 that answers every request with the real
+     * marketplace.moodle.com 401 response - see
+     * tests/fixtures/marketplace-401-server.php. Loopback-only, so this
+     * doesn't require or touch the network.
+     *
+     * @return string base URL, eg. 'http://127.0.0.1:51234'
+     */
+    private static function startUnauthorizedServer(): string
+    {
+        if (self::$unauthorizedServerBaseUrl !== null) {
+            return self::$unauthorizedServerBaseUrl;
+        }
+
+        $socket = @stream_socket_server('tcp://127.0.0.1:0', $errno, $errstr);
+        if ($socket === false) {
+            self::markTestSkipped("Could not reserve a loopback port for the test HTTP server: $errstr");
+        }
+        $name = stream_socket_get_name($socket, false);
+        $port = (int) substr($name, strrpos($name, ':') + 1);
+        fclose($socket);
+
+        $router = __DIR__ . '/../fixtures/marketplace-401-server.php';
+        $cmd = escapeshellarg(PHP_BINARY) . ' -S 127.0.0.1:' . $port . ' ' . escapeshellarg($router);
+        $process = proc_open($cmd, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, __DIR__);
+        if (!is_resource($process)) {
+            self::markTestSkipped('Could not start the PHP built-in web server for the test fixture.');
+        }
+
+        $baseurl = "http://127.0.0.1:$port";
+        // Give the server a moment to start listening.
+        for ($i = 0; $i < 50; $i++) {
+            $conn = @stream_socket_client("tcp://127.0.0.1:$port", $errno, $errstr, 0.1);
+            if ($conn) {
+                fclose($conn);
+                self::$unauthorizedServerProcess = $process;
+                self::$unauthorizedServerBaseUrl = $baseurl;
+                return $baseurl;
+            }
+            usleep(50000);
+        }
+
+        proc_terminate($process);
+        self::markTestSkipped('The PHP built-in web server for the test fixture never started listening.');
+    }
+
+    private static function stopUnauthorizedServer(): void
+    {
+        if (self::$unauthorizedServerProcess !== null && is_resource(self::$unauthorizedServerProcess)) {
+            proc_terminate(self::$unauthorizedServerProcess);
+            proc_close(self::$unauthorizedServerProcess);
+        }
+        self::$unauthorizedServerProcess = null;
+        self::$unauthorizedServerBaseUrl = null;
+    }
+
+    /** @var string|false original $CI value, saved/restored around tests that override it */
+    private $originalCiEnv = false;
+    private $originalCiEnvWasSet = false;
+
+    /** @var string temp dir used as an isolated MOOSH_CACHE_DIR for this test, so a
+     *   stale cached zip from an unrelated real run can never short-circuit
+     *   PluginCache::fetch() and mask what a test is actually exercising. */
+    private $cacheDir;
+    private $originalCacheDirEnv = false;
+    private $originalCacheDirEnvWasSet = false;
+
+    protected function setUp(): void
+    {
+        $this->originalCiEnvWasSet = getenv('CI') !== false;
+        $this->originalCiEnv = getenv('CI');
+
+        $this->originalCacheDirEnvWasSet = getenv('MOOSH_CACHE_DIR') !== false;
+        $this->originalCacheDirEnv = getenv('MOOSH_CACHE_DIR');
+        $this->cacheDir = $this->makeTempDir();
+        putenv('MOOSH_CACHE_DIR=' . $this->cacheDir);
+    }
+
+    protected function tearDown(): void
+    {
+        if ($this->originalCiEnvWasSet) {
+            putenv('CI=' . $this->originalCiEnv);
+        } else {
+            putenv('CI');
+        }
+
+        if ($this->originalCacheDirEnvWasSet) {
+            putenv('MOOSH_CACHE_DIR=' . $this->originalCacheDirEnv);
+        } else {
+            putenv('MOOSH_CACHE_DIR');
+        }
+        $this->removeDir($this->cacheDir);
+    }
+
     /**
      * Build a PluginListUpdate instance without running its constructor -
      * that would pull in GetOptionKit (not vendored in a plain checkout and
@@ -509,5 +619,357 @@ final class PluginListUpdateTest extends TestCase
         } finally {
             $this->removeDir($dir);
         }
+    }
+
+    // --- willChangeVersion() ---------------------------------------------
+
+    public function testWillChangeVersionTrueWhenVersionFileMissing(): void
+    {
+        $command = $this->makeCommand();
+        $this->assertTrue($this->callProtected($command, 'willChangeVersion', [null, '2024010100']));
+    }
+
+    public function testWillChangeVersionFalseWhenAlreadyLatest(): void
+    {
+        $command = $this->makeCommand();
+        $this->assertFalse($this->callProtected($command, 'willChangeVersion', ['2024010100', '2024010100']));
+    }
+
+    public function testWillChangeVersionFalseWhenLocalIsNewer(): void
+    {
+        $command = $this->makeCommand();
+        $this->assertFalse($this->callProtected($command, 'willChangeVersion', ['2025010100', '2024010100']));
+    }
+
+    public function testWillChangeVersionTrueWhenLocalIsOlder(): void
+    {
+        $command = $this->makeCommand();
+        $this->assertTrue($this->callProtected($command, 'willChangeVersion', ['2023010100', '2024010100']));
+    }
+
+    // --- isMarketplaceUnauthorizedResponse() ------------------------------
+
+    public function testIsMarketplaceUnauthorizedResponseTrueOn401StatusLine(): void
+    {
+        $command = $this->makeCommand();
+        $headers = ['HTTP/1.1 401 Unauthorized', 'Content-Type: application/json'];
+        $this->assertTrue($this->callProtected($command, 'isMarketplaceUnauthorizedResponse', [$headers]));
+    }
+
+    public function testIsMarketplaceUnauthorizedResponseTrueOnHttp2StatusLineWithoutReasonPhrase(): void
+    {
+        $command = $this->makeCommand();
+        // Some servers/proxies (notably HTTP/2 responses surfaced by PHP)
+        // omit the reason phrase entirely.
+        $headers = ['HTTP/2 401'];
+        $this->assertTrue($this->callProtected($command, 'isMarketplaceUnauthorizedResponse', [$headers]));
+    }
+
+    public function testIsMarketplaceUnauthorizedResponseFalseOn200(): void
+    {
+        $command = $this->makeCommand();
+        $headers = ['HTTP/1.1 200 OK', 'Content-Type: application/zip'];
+        $this->assertFalse($this->callProtected($command, 'isMarketplaceUnauthorizedResponse', [$headers]));
+    }
+
+    public function testIsMarketplaceUnauthorizedResponseFalseOn404(): void
+    {
+        $command = $this->makeCommand();
+        // Regression guard: must match 401 exactly, not just "contains 401"
+        // anywhere - a naive substring check would misfire here.
+        $headers = ['HTTP/1.1 404 Not Found', 'X-Debug: version 401 deprecated'];
+        $this->assertFalse($this->callProtected($command, 'isMarketplaceUnauthorizedResponse', [$headers]));
+    }
+
+    public function testIsMarketplaceUnauthorizedResponseFalseWhenNull(): void
+    {
+        $command = $this->makeCommand();
+        $this->assertFalse($this->callProtected($command, 'isMarketplaceUnauthorizedResponse', [null]));
+    }
+
+    public function testIsMarketplaceUnauthorizedResponseFalseOnEmptyArray(): void
+    {
+        $command = $this->makeCommand();
+        $this->assertFalse($this->callProtected($command, 'isMarketplaceUnauthorizedResponse', [[]]));
+    }
+
+    // --- isRunningInCi() ---------------------------------------------------
+
+    public function testIsRunningInCiFalseWhenUnset(): void
+    {
+        putenv('CI');
+        $command = $this->makeCommand();
+        $this->assertFalse($this->callProtected($command, 'isRunningInCi', []));
+    }
+
+    public function testIsRunningInCiTrueWhenSetToTrue(): void
+    {
+        putenv('CI=true');
+        $command = $this->makeCommand();
+        $this->assertTrue($this->callProtected($command, 'isRunningInCi', []));
+    }
+
+    public function testIsRunningInCiTrueWhenSetToOne(): void
+    {
+        // GitHub Actions itself sets CI=true, but be lenient about the
+        // exact truthy spelling other CI providers might use.
+        putenv('CI=1');
+        $command = $this->makeCommand();
+        $this->assertTrue($this->callProtected($command, 'isRunningInCi', []));
+    }
+
+    public function testIsRunningInCiFalseWhenSetToFalse(): void
+    {
+        putenv('CI=false');
+        $command = $this->makeCommand();
+        $this->assertFalse($this->callProtected($command, 'isRunningInCi', []));
+    }
+
+    public function testIsRunningInCiFalseWhenSetToZero(): void
+    {
+        putenv('CI=0');
+        $command = $this->makeCommand();
+        $this->assertFalse($this->callProtected($command, 'isRunningInCi', []));
+    }
+
+    // --- marketplaceUnauthorizedAnnotation() / reportMarketplaceUnauthorized() ---
+
+    public function testMarketplaceUnauthorizedAnnotationIsPlainWarningOutsideCi(): void
+    {
+        putenv('CI');
+        $command = $this->makeCommand();
+        $result = $this->callProtected($command, 'marketplaceUnauthorizedAnnotation', ['mod_board', 'some reason']);
+
+        $this->assertSame('WARNING mod_board: some reason', $result);
+    }
+
+    public function testMarketplaceUnauthorizedAnnotationIsGithubAnnotationUnderCi(): void
+    {
+        putenv('CI=true');
+        $command = $this->makeCommand();
+        $result = $this->callProtected($command, 'marketplaceUnauthorizedAnnotation', ['mod_board', 'some reason']);
+
+        $this->assertStringStartsWith('::warning', $result);
+        $this->assertStringContainsString('mod_board: some reason', $result);
+    }
+
+    public function testReportMarketplaceUnauthorizedKeepsExistingVersionAndWarns(): void
+    {
+        putenv('CI');
+        $command = $this->makeCommand();
+        $result = $this->callProtected($command, 'reportMarketplaceUnauthorized', ['tiny_fontfamily', '2026010100', '2026071400']);
+
+        $this->assertStringStartsWith('SKIP   tiny_fontfamily: ', $result);
+        $this->assertStringContainsString('keeping local version 2026010100', $result);
+        $this->assertStringContainsString("\nWARNING tiny_fontfamily: ", $result);
+    }
+
+    public function testReportMarketplaceUnauthorizedReportsUnwrittenWhenNoExistingVersion(): void
+    {
+        putenv('CI=true');
+        $command = $this->makeCommand();
+        $result = $this->callProtected($command, 'reportMarketplaceUnauthorized', ['tiny_fontfamily', null, '2026071400']);
+
+        $this->assertStringContainsString('leaving version file unwritten', $result);
+        $this->assertStringContainsString('::warning', $result);
+    }
+
+    // --- downloadPluginZip() / reconcileChecksum(): real HTTP 401 ---------
+    // These spin up a loopback-only PHP built-in web server (see
+    // startUnauthorizedServer() / tests/fixtures/marketplace-401-server.php)
+    // that answers with the exact status/body marketplace.moodle.com
+    // returns for a subscription-only plugin, so the real
+    // $http_response_header-based detection path is exercised end to end -
+    // no network access required.
+
+    public function testDownloadPluginZipThrowsMarketplaceUnauthorizedOn401(): void
+    {
+        $baseurl = self::startUnauthorizedServer();
+        $command = $this->makeCommand();
+        $this->setProtected($command, 'expandedOptions', []);
+
+        $this->expectException(MarketplaceUnauthorizedException::class);
+        $this->expectExceptionMessageMatches('/HTTP 401/');
+        $this->callProtected($command, 'downloadPluginZip', ['tiny_fontfamily', '2026071400', $baseurl . '/api/plugins/tiny_fontfamily/versions/2026071400/download']);
+    }
+
+    public function testReconcileChecksumPropagatesMarketplaceUnauthorizedUnwrapped(): void
+    {
+        $baseurl = self::startUnauthorizedServer();
+        $dir = $this->makeTempDir();
+        try {
+            $command = $this->makeCommand();
+            $this->setProtected($command, 'expandedOptions', []);
+
+            try {
+                $this->callProtected($command, 'reconcileChecksum', [
+                    'tiny_fontfamily', $dir, '2026071400', $baseurl . '/download', true,
+                ]);
+                $this->fail('Expected a MarketplaceUnauthorizedException.');
+            } catch (MarketplaceUnauthorizedException $e) {
+                // Must NOT have been rewrapped into a generic RuntimeException
+                // with the "could not pin checksum for ..." prefix.
+                $this->assertStringNotContainsString('could not pin checksum', $e->getMessage());
+            }
+        } finally {
+            $this->removeDir($dir);
+        }
+    }
+
+    // --- updateStandardComponent(): end-to-end 401 handling ---------------
+
+    public function testUpdateStandardComponentLeavesVersionUnwrittenOn401(): void
+    {
+        putenv('CI');
+        $baseurl = self::startUnauthorizedServer();
+        $dir = $this->makeTempDir();
+        try {
+            $command = $this->makeCommand();
+            $this->setProtected($command, 'moodlerelease', '4.3');
+            $this->setProtected($command, 'expandedOptions', []);
+            $this->setProtected($command, 'pluginsdata', $this->makePluginsDataWithDownloadUrl([
+                ['component' => 'tiny_fontfamily', 'downloadurl' => $baseurl . '/download', 'versions' => [
+                    ['version' => 2026071400, 'releases' => ['4.3']],
+                ]],
+            ]));
+
+            // No version file yet - a plain run would CREATE it.
+            $result = $this->callProtected($command, 'updateStandardComponent', ['tiny_fontfamily', $dir, false]);
+
+            $this->assertStringStartsWith('SKIP   tiny_fontfamily: ', $result);
+            $this->assertStringContainsString('leaving version file unwritten', $result);
+            $this->assertStringContainsString('WARNING tiny_fontfamily: ', $result);
+            $this->assertFileDoesNotExist($dir . '/version');
+        } finally {
+            $this->removeDir($dir);
+        }
+    }
+
+    public function testUpdateStandardComponentKeepsExistingVersionOn401(): void
+    {
+        putenv('CI');
+        $baseurl = self::startUnauthorizedServer();
+        $dir = $this->makeTempDir();
+        try {
+            file_put_contents($dir . '/version', '2025010100');
+
+            $command = $this->makeCommand();
+            $this->setProtected($command, 'moodlerelease', '4.3');
+            $this->setProtected($command, 'expandedOptions', []);
+            $this->setProtected($command, 'pluginsdata', $this->makePluginsDataWithDownloadUrl([
+                ['component' => 'tiny_fontfamily', 'downloadurl' => $baseurl . '/download', 'versions' => [
+                    ['version' => 2026071400, 'releases' => ['4.3']],
+                ]],
+            ]));
+
+            $result = $this->callProtected($command, 'updateStandardComponent', ['tiny_fontfamily', $dir, false]);
+
+            $this->assertStringStartsWith('SKIP   tiny_fontfamily: ', $result);
+            $this->assertStringContainsString('keeping local version 2025010100', $result);
+            $this->assertSame('2025010100', file_get_contents($dir . '/version'));
+        } finally {
+            $this->removeDir($dir);
+        }
+    }
+
+    public function testUpdateStandardComponentEmitsGithubAnnotationUnderCi(): void
+    {
+        putenv('CI=true');
+        $baseurl = self::startUnauthorizedServer();
+        $dir = $this->makeTempDir();
+        try {
+            $command = $this->makeCommand();
+            $this->setProtected($command, 'moodlerelease', '4.3');
+            $this->setProtected($command, 'expandedOptions', []);
+            $this->setProtected($command, 'pluginsdata', $this->makePluginsDataWithDownloadUrl([
+                ['component' => 'tiny_fontfamily', 'downloadurl' => $baseurl . '/download', 'versions' => [
+                    ['version' => 2026071400, 'releases' => ['4.3']],
+                ]],
+            ]));
+
+            $result = $this->callProtected($command, 'updateStandardComponent', ['tiny_fontfamily', $dir, false]);
+
+            $this->assertStringContainsString('::warning', $result);
+            $this->assertFileDoesNotExist($dir . '/version');
+        } finally {
+            $this->removeDir($dir);
+        }
+    }
+
+    public function testUpdateStandardComponentDoesNotCheckReachabilityWithNoChecksum(): void
+    {
+        // --no-checksum means "no downloads at all" - a subscription-only
+        // plugin's 401 can't be detected in this mode, so the version is
+        // written as normal (matches the pre-existing --no-checksum contract).
+        $dir = $this->makeTempDir();
+        try {
+            $command = $this->makeCommand();
+            $this->setProtected($command, 'moodlerelease', '4.3');
+            $this->setProtected($command, 'expandedOptions', ['no-checksum' => true]);
+            $this->setProtected($command, 'pluginsdata', $this->makePluginsDataWithDownloadUrl([
+                ['component' => 'tiny_fontfamily', 'downloadurl' => 'http://invalid.invalid/nope.zip', 'versions' => [
+                    ['version' => 2026071400, 'releases' => ['4.3']],
+                ]],
+            ]));
+
+            $result = $this->callProtected($command, 'updateStandardComponent', ['tiny_fontfamily', $dir, false]);
+
+            $this->assertStringStartsWith('CREATE ', $result);
+            $this->assertSame("2026071400\n", file_get_contents($dir . '/version'));
+        } finally {
+            $this->removeDir($dir);
+        }
+    }
+
+    public function testUpdateStandardComponentDryRunNeverDownloads(): void
+    {
+        // Dry-run must never touch the network, 401 or otherwise - an
+        // unreachable/invalid URL here would throw if downloadPluginZip()
+        // were reached at all.
+        $dir = $this->makeTempDir();
+        try {
+            $command = $this->makeCommand();
+            $this->setProtected($command, 'moodlerelease', '4.3');
+            $this->setProtected($command, 'expandedOptions', []);
+            $this->setProtected($command, 'pluginsdata', $this->makePluginsDataWithDownloadUrl([
+                ['component' => 'tiny_fontfamily', 'downloadurl' => 'http://invalid.invalid/nope.zip', 'versions' => [
+                    ['version' => 2026071400, 'releases' => ['4.3']],
+                ]],
+            ]));
+
+            $result = $this->callProtected($command, 'updateStandardComponent', ['tiny_fontfamily', $dir, true]);
+
+            $this->assertStringStartsWith('WOULD CREATE ', $result);
+            $this->assertFileDoesNotExist($dir . '/version');
+        } finally {
+            $this->removeDir($dir);
+        }
+    }
+
+    /**
+     * Same shape as makePluginsData(), but with a per-plugin downloadurl
+     * attached to every version (needed for the checksum/download tests -
+     * makePluginsData() intentionally leaves it unset).
+     */
+    private function makePluginsDataWithDownloadUrl(array $plugins): \stdClass
+    {
+        $data = new \stdClass();
+        $data->plugins = array_map(function ($plugin) {
+            $obj = new \stdClass();
+            $obj->component = $plugin['component'];
+            $obj->versions = array_map(function ($version) use ($plugin) {
+                $vObj = new \stdClass();
+                $vObj->version = $version['version'];
+                $vObj->downloadurl = $plugin['downloadurl'];
+                $vObj->supportedmoodles = array_map(function ($release) {
+                    $sObj = new \stdClass();
+                    $sObj->release = $release;
+                    return $sObj;
+                }, $version['releases']);
+                return $vObj;
+            }, $plugin['versions']);
+            return $obj;
+        }, $plugins);
+        return $data;
     }
 }

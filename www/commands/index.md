@@ -2198,6 +2198,30 @@ env var to check that checksum against a specific value you already trust -
 only meaningful when updating a single named plugin, since it's one value
 for the whole command.
 
+Some plugins listed in `plugins.json` require a paid Moodle Marketplace
+subscription and can't be downloaded with just any `--token`/`MOODLE_MARKETPLACE_TOKEN`
+- moodle.org still lists them (and a "latest" version for them) the same as
+any other plugin, but downloading their zip fails with:
+
+    HTTP/1.1 401 Unauthorized
+    {"code":401,"message":"Not privileged to request the resource."}
+
+Before writing a new or updated `version` for a component, this command
+confirms the resolved zip is actually downloadable with the currently
+configured token. If that download comes back `401`, the component is left
+exactly as it was on disk - an existing `version` file is kept untouched,
+and one that doesn't exist yet is not created - instead of pinning a version
+that couldn't itself be fetched. This is reported as:
+
+* a GitHub Actions `::warning::` annotation when running in CI (ie. the
+  `CI` env var is set, as GitHub Actions and most other CI providers do), or
+* a plain `WARNING` line otherwise.
+
+This check (like all other download activity) is skipped entirely when
+`--no-checksum` is given - in that mode a subscription-only plugin's version
+is written as normal, since there's no way to detect the `401` without
+downloading anything.
+
 You may specify a proxy server with the command line option or by defining
 the `http_proxy` env var.
 
@@ -2216,6 +2240,11 @@ Example 3: report what would change, without writing anything
 Example 4: update without downloading zips to pin checksums
 
     moosh plugin-list-update --no-checksum
+
+Example 5: update using a Moodle Marketplace subscription token, so
+subscription-only plugins are updated too instead of being skipped with a warning
+
+    moosh plugin-list-update -t "$MOODLE_MARKETPLACE_TOKEN"
 
 plugins-usage
 -------------
