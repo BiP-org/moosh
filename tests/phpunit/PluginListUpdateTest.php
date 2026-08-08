@@ -2,7 +2,7 @@
 
 use PHPUnit\Framework\TestCase;
 use Moosh\Command\Generic\Plugin\PluginListUpdate;
-use Moosh\Command\Generic\Plugin\MarketplaceUnauthorizedException;
+use Moosh\MarketplaceUnauthorizedException;
 
 final class PluginListUpdateTest extends TestCase
 {

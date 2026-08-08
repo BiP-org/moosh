@@ -78,7 +78,7 @@ namespace Moosh\Command\Generic\Plugin;
 use Moosh\MooshCommand;
 use Moosh\PluginCache;
 use Moosh\PluginChecksum;
-use Moosh\Command\Generic\Plugin\MarketplaceUnauthorizedException;
+use Moosh\MarketplaceUnauthorizedException;
 
 class PluginListUpdate extends MooshCommand
 {
